@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 
+import { ForceResetPasswordFormModal } from "@/components/auth/ForceResetPasswordFormModal";
 import { ForceResetPasswordModal } from "@/components/auth/ForceResetPasswordModal";
-import { useGetMeQuery, useLogoutMutation } from "@/features/auth/auth-api";
+import { useChangePasswordMutation, useGetMeQuery } from "@/features/auth/auth-api";
 import { type AppRole } from "@/hooks/useRoleAccess";
-import { performLogout } from "@/lib/auth/logout";
 import { setAccessToken, setCurrentUser } from "@/store/auth-slice";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 
@@ -29,12 +29,13 @@ function getDefaultRedirect(role: AppRole): string {
 
 export function RouteGuard({ children, requiredRoles, redirectTo }: RouteGuardProps) {
   const router = useRouter();
-  const pathname = usePathname() ?? "/";
   const dispatch = useAppDispatch();
   const { accessToken, currentUser } = useAppSelector((state) => state.auth);
-  const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
+  const [changePassword, { isLoading: isChangingPassword }] = useChangePasswordMutation();
   const [bootstrappedToken, setBootstrappedToken] = useState<string | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
+  const [isResetFormOpen, setIsResetFormOpen] = useState(false);
+  const [isResetPromptDismissed, setIsResetPromptDismissed] = useState(false);
   const effectiveToken = accessToken ?? bootstrappedToken;
 
   const { data: me, isError: meError } = useGetMeQuery(undefined, {
@@ -67,7 +68,12 @@ export function RouteGuard({ children, requiredRoles, redirectTo }: RouteGuardPr
       return;
     }
 
-    void performLogout({ dispatch, router, broadcast: true });
+    dispatch(setAccessToken(null));
+    dispatch(setCurrentUser(null));
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("accessToken");
+    }
+    router.replace("/login");
   }, [dispatch, meError, router]);
 
   useEffect(() => {
@@ -86,25 +92,34 @@ export function RouteGuard({ children, requiredRoles, redirectTo }: RouteGuardPr
   }, [isHydrated, effectiveToken, currentUser, requiredRoles, router, redirectTo]);
 
   const shouldForcePasswordReset = useMemo(() => {
-    if (!currentUser?.must_reset_password) {
-      return false;
+    return Boolean(currentUser?.must_reset_password);
+  }, [currentUser?.must_reset_password]);
+
+  useEffect(() => {
+    if (!shouldForcePasswordReset) {
+      setIsResetFormOpen(false);
+      setIsResetPromptDismissed(false);
     }
+  }, [shouldForcePasswordReset]);
 
-    return pathname !== "/reset-password";
-  }, [currentUser?.must_reset_password, pathname]);
-
-  const handleForceResetLogout = useCallback(async () => {
-    await performLogout({
-      dispatch,
-      router,
-      callServerLogout: () => logout().unwrap(),
-      broadcast: true,
-    });
-  }, [dispatch, logout, router]);
+  const handleResetPromptCancel = useCallback(() => {
+    setIsResetPromptDismissed(true);
+    setIsResetFormOpen(false);
+  }, []);
 
   const handleResetNow = useCallback(() => {
-    router.replace("/reset-password");
-  }, [router]);
+    setIsResetFormOpen(true);
+  }, []);
+
+  const handleResetPasswordSubmit = useCallback(async (
+    values: { old_password: string; new_password: string },
+  ) => {
+    await changePassword(values).unwrap();
+    if (currentUser) {
+      dispatch(setCurrentUser({ ...currentUser, must_reset_password: false }));
+    }
+    setIsResetFormOpen(false);
+  }, [changePassword, currentUser, dispatch]);
 
   if (!isHydrated) {
     return null;
@@ -126,10 +141,15 @@ export function RouteGuard({ children, requiredRoles, redirectTo }: RouteGuardPr
     <>
       {children}
       <ForceResetPasswordModal
-        open={shouldForcePasswordReset}
+        open={shouldForcePasswordReset && !isResetFormOpen && !isResetPromptDismissed}
         onResetNow={handleResetNow}
-        onLogout={handleForceResetLogout}
-        isLoggingOut={isLoggingOut}
+        onCancel={handleResetPromptCancel}
+      />
+      <ForceResetPasswordFormModal
+        open={shouldForcePasswordReset && isResetFormOpen}
+        onBack={() => setIsResetFormOpen(false)}
+        onSubmit={handleResetPasswordSubmit}
+        isSubmitting={isChangingPassword}
       />
     </>
   );

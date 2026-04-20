@@ -13,13 +13,10 @@ interface AppShellProps {
 }
 
 export function AppShell({ children }: AppShellProps) {
-  const { isAdminOrCollector, isSuperAdmin, isBorrower } = useRoleAccess();
+  const { isAdminOrCollector } = useRoleAccess();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const { data: unreadNotifications } = useListNotificationsQuery(
-    { active: true, unread: true },
-    { skip: isSuperAdmin || isBorrower },
-  );
-  const unreadCount = unreadNotifications?.length ?? 0;
+  const { data: unreadNotifications } = useListNotificationsQuery({ active: true, unread: true });
+  const unreadCount = unreadNotifications?.count ?? 0;
 
   return (
     <div className="min-h-screen bg-canvas flex">
@@ -41,31 +38,41 @@ export function AppShell({ children }: AppShellProps) {
             </svg>
           </button>
           <p className="text-sm font-bold tracking-wide text-text">Digikhaato</p>
-          {!isSuperAdmin && !isBorrower ? (
-            <Link
-              href="/notifications"
-              className="w-9 h-9 rounded-lg border border-border flex items-center justify-center text-muted hover:text-text hover:bg-surface2 transition-colors relative"
-              aria-label="Notifications"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-danger-500 text-white text-[9px] font-bold flex items-center justify-center">
-                  {unreadCount > 9 ? "9+" : unreadCount}
-                </span>
-              )}
-            </Link>
-          ) : (
-            <div className="w-9" />
-          )}
+          <Link
+            href="/notifications"
+            className="w-9 h-9 rounded-lg border border-border flex items-center justify-center text-muted hover:text-text hover:bg-surface2 transition-colors relative"
+            aria-label="Notifications"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-danger-500 text-white text-[9px] font-bold flex items-center justify-center">
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
+          </Link>
         </header>
 
         {/* Desktop header */}
-        <header className="hidden lg:flex h-16 items-center px-6 border-b border-border bg-surface/80 backdrop-blur-sm">
+        <header className="hidden lg:flex h-16 items-center justify-between px-6 border-b border-border bg-surface/80 backdrop-blur-sm">
           <div className="w-full max-w-md">
             {isAdminOrCollector ? <GlobalSearch /> : null}
           </div>
+          <Link
+            href="/notifications"
+            className="w-9 h-9 rounded-lg border border-border flex items-center justify-center text-muted hover:text-text hover:bg-surface2 transition-colors relative flex-shrink-0"
+            aria-label="Notifications"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-danger-500 text-white text-[9px] font-bold flex items-center justify-center">
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
+          </Link>
         </header>
 
         <main className="flex-1 pb-20 lg:pb-8">

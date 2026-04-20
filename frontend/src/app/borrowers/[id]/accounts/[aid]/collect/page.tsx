@@ -11,7 +11,7 @@ import {
 } from "@/components/forms/system";
 import { Screen } from "@/components/layout/Screen";
 import { Button } from "@/components/ui/Button";
-import { useCreateDailyCollectionMutation } from "@/features/accounts/account-api";
+import { useCreateDailyCollectionMutation, useGetAccountQuery } from "@/features/accounts/account-api";
 import {
   collectionValidationSchema,
   focusFirstInvalidField,
@@ -24,11 +24,14 @@ const COLLECTION_FIELDS: Array<keyof CollectionFormValues> = ["account", "paymen
 export default function AddCollectionPage() {
   const params = useParams<{ id: string; aid: string }>();
   const router = useRouter();
-  const borrowerId = Number(params.id);
-  const accountId = Number(params.aid);
+  const borrowerId = params.id;
+  const accountRef = params.aid;
   const [createCollection] = useCreateDailyCollectionMutation();
+  const { data: account } = useGetAccountQuery(accountRef, { skip: !accountRef });
+  const accountId = account?.id ?? (Number.isFinite(Number(accountRef)) ? Number(accountRef) : 0);
 
   const formik = useFormik<CollectionFormValues>({
+    enableReinitialize: true,
     initialValues: {
       account: accountId,
       payment: 0,
@@ -40,6 +43,10 @@ export default function AddCollectionPage() {
     onSubmit: async (values, helpers) => {
       helpers.setStatus(undefined);
       try {
+        if (!accountId) {
+          helpers.setStatus({ formError: "Unable to resolve account. Please reload and try again." });
+          return;
+        }
         await createCollection({
           account: accountId,
           payment: Number(values.payment),
@@ -61,11 +68,11 @@ export default function AddCollectionPage() {
   return (
     <Screen
       title="Add Collection"
-      backHref={`/borrowers/${borrowerId}/accounts/${accountId}`}
+      backHref={`/borrowers/${borrowerId}/accounts/${accountRef}`}
       breadcrumb={[
         { label: "Borrowers", href: "/borrowers" },
         { label: "Borrower", href: `/borrowers/${borrowerId}` },
-        { label: "Account", href: `/borrowers/${borrowerId}/accounts/${accountId}` },
+        { label: "Account", href: `/borrowers/${borrowerId}/accounts/${accountRef}` },
         { label: "Add Collection" },
       ]}
     >
@@ -103,7 +110,7 @@ export default function AddCollectionPage() {
               <Button variant="secondary" type="button" onClick={() => router.back()} fullWidth>
                 Cancel
               </Button>
-              <Button type="submit" disabled={formik.isSubmitting} loading={formik.isSubmitting} fullWidth>
+              <Button type="submit" disabled={formik.isSubmitting || !accountId} loading={formik.isSubmitting} fullWidth>
                 Save Collection
               </Button>
             </div>

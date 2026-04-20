@@ -1,3 +1,4 @@
+import uuid as _uuid
 from decimal import Decimal
 from django.conf import settings
 from django.db import models
@@ -12,6 +13,7 @@ class AccountStatus(models.TextChoices):
 
 
 class Account(TimeStampedModel):
+    uuid = models.UUIDField(default=_uuid.uuid4, unique=True, editable=False, db_index=True)
     borrower = models.ForeignKey(Borrower, on_delete=models.PROTECT, related_name="accounts")
     amount_given = models.DecimalField(max_digits=12, decimal_places=2)
     daily_interest_rate = models.DecimalField(max_digits=6, decimal_places=4)

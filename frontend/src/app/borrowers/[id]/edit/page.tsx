@@ -13,7 +13,7 @@ import type { BorrowerFormValues } from "@/validation";
 export default function EditBorrowerPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const id = Number(params.id);
+  const id = params.id;
   const { data } = useGetBorrowerQuery(id, { skip: !id });
   const [updateBorrower] = useUpdateBorrowerMutation();
 

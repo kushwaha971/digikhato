@@ -1,14 +1,12 @@
 import * as Yup from "yup";
 
-import { REGEX } from "@/constants/regex";
+import { TEAM_MEMBER_ROLE_VALUES, type TeamMemberRole } from "@/constants/form-options";
 import {
   mobileSchema,
   normalizeMobile,
   requiredMessage,
   requiredTrimmedString,
 } from "@/validation/common";
-
-export type TeamMemberRole = "admin" | "collector" | "borrower";
 
 export type TeamMemberFormValues = {
   full_name: string;
@@ -20,13 +18,13 @@ export type TeamMemberFormValues = {
 
 const passwordSchema = Yup.string()
   .required(requiredMessage("Password"))
-  .matches(REGEX.passwordStrong, "Password must be at least 8 characters");
+  .min(8, "Password must be at least 8 characters");
 
 export const teamMemberValidationSchema: Yup.ObjectSchema<TeamMemberFormValues> = Yup.object({
   full_name: requiredTrimmedString("Full name", 2, 120),
   mobile_number: mobileSchema(),
   password: passwordSchema,
-  role: Yup.mixed<TeamMemberRole>().oneOf(["admin", "collector", "borrower"]).required(requiredMessage("Role")),
+  role: Yup.mixed<TeamMemberRole>().oneOf([...TEAM_MEMBER_ROLE_VALUES]).required(requiredMessage("Role")),
   branch_name: Yup.string().transform((value) => (typeof value === "string" ? value.trim() : value)).optional(),
 });
 

@@ -1,9 +1,9 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
 import { BrandLogo } from "@/components/branding/BrandLogo";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useLogoutMutation } from "@/features/auth/auth-api";
 import { useListNotificationsQuery } from "@/features/notifications/notification-api";
 import { useRoleAccess, Permission } from "@/hooks/useRoleAccess";
@@ -146,7 +146,8 @@ export function Sidebar() {
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
   const currentUser = useAppSelector((state) => state.auth.currentUser);
   const { data: notifications } = useListNotificationsQuery({ active: true, unread: true });
-  const unreadCount = notifications?.length ?? 0;
+  const unreadCount = notifications?.count ?? 0;
+  const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
 
   let primaryNav = MAIN_NAV;
   if (isSuperAdmin) primaryNav = SUPER_ADMIN_NAV;
@@ -198,8 +199,7 @@ export function Sidebar() {
       </nav>
 
       {/* Notifications bell */}
-      {!isSuperAdmin && !isBorrower && (
-        <div className="px-2 xl:px-3 pb-1">
+      <div className="px-2 xl:px-3 pb-1">
           <Link
             href="/notifications"
             className={[
@@ -221,8 +221,7 @@ export function Sidebar() {
             </span>
             <span className="hidden xl:block text-sm truncate">Notifications</span>
           </Link>
-        </div>
-      )}
+      </div>
 
       {/* Settings always at bottom */}
       {can(SETTINGS_NAV.permission) && (
@@ -246,7 +245,7 @@ export function Sidebar() {
           <div className="px-2 xl:px-3 space-y-2">
             <button
               type="button"
-              onClick={handleLogout}
+              onClick={() => setConfirmLogoutOpen(true)}
               disabled={isLoggingOut}
               className="w-full inline-flex items-center justify-center gap-1.5 h-9 rounded-lg text-sm font-semibold text-muted hover:text-text hover:bg-surface2 transition-colors border border-border disabled:opacity-50"
               aria-label="Sign out"
@@ -259,6 +258,19 @@ export function Sidebar() {
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={confirmLogoutOpen}
+        onClose={() => setConfirmLogoutOpen(false)}
+        onConfirm={async () => {
+          await handleLogout();
+          setConfirmLogoutOpen(false);
+        }}
+        isLoading={isLoggingOut}
+        title="Confirm Logout"
+        description="Are you sure you want to log out?"
+        confirmLabel="Log out"
+        confirmVariant="danger"
+      />
     </aside>
   );
 }

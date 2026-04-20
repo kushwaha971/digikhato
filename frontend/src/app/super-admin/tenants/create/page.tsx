@@ -117,8 +117,8 @@ export default function CreateTenantPage() {
             onBlur={formik.handleBlur}
             touched={passwordState.touched}
             error={passwordState.error}
-            placeholder="Strong password"
-            helperText="At least 8 chars, one uppercase, one number, one special char"
+            placeholder="Set password"
+            helperText="Minimum 8 characters"
             required
             data-testid="tenant-password"
           />

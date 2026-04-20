@@ -24,12 +24,17 @@ export function SessionSecurityProvider({ children }: PropsWithChildren) {
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
   const [isExtendingSession, setIsExtendingSession] = useState(false);
 
-  const sessionEnabled = useMemo(() => {
+  const isProtectedRoute = useMemo(() => {
     if (!accessToken) {
       return false;
     }
     return !isPublicPath(pathname);
   }, [accessToken, pathname]);
+
+  const inactivityGuardEnabled = useMemo(
+    () => isProtectedRoute && SESSION_CONFIG.hasInactivityTimeout,
+    [isProtectedRoute],
+  );
 
   const logoutSession = useCallback(async (broadcast = true) => {
     await performLogout({
@@ -41,7 +46,7 @@ export function SessionSecurityProvider({ children }: PropsWithChildren) {
   }, [dispatch, logout, router]);
 
   const { isWarningOpen, secondsUntilTimeout, markActivity } = useSessionInactivity({
-    enabled: sessionEnabled,
+    enabled: inactivityGuardEnabled,
     inactivityTimeoutMs: SESSION_CONFIG.inactivityTimeoutMs,
     warningLeadMs: SESSION_CONFIG.warningLeadMs,
     onTimeout: async () => {
@@ -50,7 +55,7 @@ export function SessionSecurityProvider({ children }: PropsWithChildren) {
   });
 
   const handleStaySignedIn = useCallback(async () => {
-    if (!sessionEnabled) {
+    if (!inactivityGuardEnabled) {
       return;
     }
 
@@ -68,18 +73,18 @@ export function SessionSecurityProvider({ children }: PropsWithChildren) {
     } finally {
       setIsExtendingSession(false);
     }
-  }, [dispatch, logoutSession, markActivity, sessionEnabled]);
+  }, [dispatch, inactivityGuardEnabled, logoutSession, markActivity]);
 
   useEffect(() => {
-    if (!sessionEnabled) {
+    if (!inactivityGuardEnabled) {
       return;
     }
 
     markActivity();
-  }, [sessionEnabled, pathname, markActivity]);
+  }, [inactivityGuardEnabled, pathname, markActivity]);
 
   useEffect(() => {
-    if (!sessionEnabled) {
+    if (!isProtectedRoute) {
       return;
     }
 
@@ -92,13 +97,13 @@ export function SessionSecurityProvider({ children }: PropsWithChildren) {
         });
       }
     });
-  }, [dispatch, router, sessionEnabled]);
+  }, [dispatch, isProtectedRoute, router]);
 
   return (
     <>
       {children}
       <SessionTimeoutWarning
-        open={sessionEnabled && isWarningOpen}
+        open={inactivityGuardEnabled && isWarningOpen}
         secondsUntilTimeout={secondsUntilTimeout}
         isLoading={isLoggingOut || isExtendingSession}
         onStaySignedIn={handleStaySignedIn}

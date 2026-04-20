@@ -15,22 +15,22 @@ function fmt(val: string | number | undefined) {
 
 export default function PortalAccountDetailPage() {
   const params = useParams<{ id: string }>();
-  const accountId = Number(params.id);
+  const accountRef = params.id;
 
-  const { data: account, isLoading: accountLoading } = useGetAccountQuery(accountId);
+  const { data: account, isLoading: accountLoading } = useGetAccountQuery(accountRef, { skip: !accountRef });
   const { data: collectionsData, isLoading: collectionsLoading } = useGetDailyCollectionsQuery({
-    account: accountId,
-  });
+    account: accountRef,
+  }, { skip: !accountRef });
 
   const collections = collectionsData?.results ?? [];
 
   return (
     <Screen
-      title={`Account ID ${accountId}`}
+      title={account ? `Account ${account.uuid?.slice(0, 8) ?? account.id}` : "Account"}
       backHref="/portal"
       breadcrumb={[
         { label: "My Accounts", href: "/portal" },
-        { label: `Account ID ${accountId}` },
+        { label: account ? `Account ${account.uuid?.slice(0, 8) ?? account.id}` : "Account" },
       ]}
     >
       <div className="grid grid-cols-3 gap-3 mb-6">

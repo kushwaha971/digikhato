@@ -14,7 +14,7 @@ export default function AddBorrowerPage() {
   const router = useRouter();
   const [addBorrower] = useAddBorrowerMutation();
   const [tempPasswordInfo, setTempPasswordInfo] = useState<{
-    borrowerId: number;
+    borrowerUuid: string;
     name: string;
     mobile: string;
     password: string;
@@ -25,13 +25,13 @@ export default function AddBorrowerPage() {
     const borrower = await addBorrower(values).unwrap();
     if (borrower.temporary_password) {
       setTempPasswordInfo({
-        borrowerId: borrower.id,
+        borrowerUuid: borrower.uuid,
         name: (values as { name?: string }).name ?? "Borrower",
         mobile: (values as { mobile_number?: string }).mobile_number ?? "",
         password: borrower.temporary_password,
       });
     } else {
-      router.push(`/borrowers/${borrower.id}`);
+      router.push(`/borrowers/${borrower.uuid}`);
     }
   };
 
@@ -45,13 +45,16 @@ export default function AddBorrowerPage() {
 
   const handleContinue = () => {
     if (tempPasswordInfo) {
-      router.push(`/borrowers/${tempPasswordInfo.borrowerId}`);
+      router.push(`/borrowers/${tempPasswordInfo.borrowerUuid}`);
     }
   };
 
   return (
     <Screen title="Add Borrower" backHref="/borrowers">
-      <BorrowerForm onSubmit={onSubmit} submitLabel="Create Borrower" />
+      <BorrowerForm onSubmit={onSubmit} submitLabel="Create Borrower" showPasswordField requirePassword />
+      <p className="mt-3 text-xs text-muted">
+        Borrower login is created from mobile number automatically using the login password you set above.
+      </p>
 
       <Modal
         open={Boolean(tempPasswordInfo)}

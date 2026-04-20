@@ -2,6 +2,7 @@
 
 import { useFormik } from "formik";
 
+import { TEAM_MEMBER_ROLE_OPTIONS, type TeamMemberRole } from "@/constants/form-options";
 import {
   FormErrorBanner,
   MobileNumberInput,
@@ -26,7 +27,7 @@ type TeamMemberFormProps = Readonly<{
   onCancel?: () => void;
   submitLabel?: string;
   defaultValues?: Partial<TeamMemberFormValues>;
-  allowedRoles?: Array<TeamMemberFormValues["role"]>;
+  allowedRoles?: Array<TeamMemberRole>;
 }>;
 
 const TEAM_FIELDS: Array<keyof TeamMemberFormValues> = [
@@ -42,7 +43,7 @@ export function TeamMemberForm({
   onCancel,
   submitLabel = "Create Member",
   defaultValues,
-  allowedRoles = ["admin", "collector", "borrower"],
+  allowedRoles = [...TEAM_MEMBER_ROLE_OPTIONS.map((option) => option.value)],
 }: TeamMemberFormProps) {
   const formik = useFormik<TeamMemberFormValues>({
     enableReinitialize: true,
@@ -110,8 +111,8 @@ export function TeamMemberForm({
         onBlur={formik.handleBlur}
         touched={passwordState.touched}
         error={passwordState.error}
-        placeholder="Set a strong password"
-        helperText="At least 8 chars, one uppercase, one number, one special char"
+        placeholder="Set password"
+        helperText="Minimum 8 characters"
         required
         data-testid="team-member-password"
       />
@@ -127,9 +128,13 @@ export function TeamMemberForm({
         required
         data-testid="team-member-role"
       >
-        {allowedRoles.includes("admin") ? <option value="admin">Admin — Full access</option> : null}
-        {allowedRoles.includes("collector") ? <option value="collector">Collector — Collection only</option> : null}
-        {allowedRoles.includes("borrower") ? <option value="borrower">Borrower — Self view only</option> : null}
+        {TEAM_MEMBER_ROLE_OPTIONS
+          .filter((option) => allowedRoles.includes(option.value))
+          .map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
       </SelectInput>
 
       <div className="flex gap-3 pt-2">

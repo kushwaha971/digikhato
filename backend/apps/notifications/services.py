@@ -22,21 +22,77 @@ def _recipient_user_ids_for_loan(loan: Loan) -> list[int]:
     if assigned_agent_id:
         recipient_ids.add(assigned_agent_id)
 
+    borrower_user_id = loan.borrower.user_id
+    if borrower_user_id:
+        recipient_ids.add(borrower_user_id)
+
     # Keep recipients tenant-scoped and operational only.
     if not recipient_ids:
         return []
 
-    active_users = User.objects.filter(id__in=recipient_ids, is_active=True).exclude(role=RoleChoices.BORROWER)
+    active_users = User.objects.filter(id__in=recipient_ids, is_active=True)
     return list(active_users.values_list("id", flat=True))
 
 
-def _build_due_alert_message(loan: Loan, *, days_to_due: int | None, due_date: date | None) -> str:
+def _build_due_alert_message(loan: Loan, *, days_to_due: int | None, due_date: date | None, role: str, is_overdue: bool) -> str:
     borrower_name = loan.borrower.name
+    if role == RoleChoices.BORROWER:
+        if is_overdue:
+            return f"Your repayment is overdue since {due_date}."
+        if due_date is None or days_to_due is None:
+            return "Your repayment due date is approaching."
+        if days_to_due == 0:
+            return f"Your repayment is due today ({due_date})."
+        return f"Your repayment is due in {days_to_due} day(s) on {due_date}."
+
+    if role == RoleChoices.COLLECTOR:
+        if is_overdue:
+            return f"Overdue loan for {borrower_name}. Immediate follow-up needed."
+        if due_date is None or days_to_due is None:
+            return f"Follow up with {borrower_name} for upcoming repayment."
+        if days_to_due == 0:
+            return f"Collection task: {borrower_name} has repayment due today."
+        return f"Follow up: {borrower_name} due in {days_to_due} day(s) on {due_date}."
+
+    # Admin / super_admin
+    if is_overdue:
+        return f"Escalation: {borrower_name} loan is overdue since {due_date}."
     if due_date is None or days_to_due is None:
-        return f"Loan for {borrower_name} is nearing due date."
+        return f"System update: {borrower_name} loan due window opened."
     if days_to_due == 0:
-        return f"Loan for {borrower_name} is due today ({due_date})."
-    return f"Loan for {borrower_name} is due in {days_to_due} day(s) on {due_date}."
+        return f"System activity: {borrower_name} repayment due today."
+    return f"Overall update: {borrower_name} due in {days_to_due} day(s) on {due_date}."
+
+
+def _notification_type_for_role(*, role: str, is_overdue: bool, days_to_due: int | None) -> str:
+    if role == RoleChoices.BORROWER:
+        if is_overdue:
+            return NotificationType.OVERDUE_ALERT
+        if days_to_due == 0:
+            return NotificationType.DUE_ALERT
+        return NotificationType.REPAYMENT_REMINDER
+
+    if role == RoleChoices.COLLECTOR:
+        if is_overdue:
+            return NotificationType.OVERDUE_LOAN
+        if days_to_due == 0:
+            return NotificationType.COLLECTION_TASK
+        return NotificationType.FOLLOW_UP
+
+    if is_overdue:
+        return NotificationType.ESCALATION
+    if days_to_due == 0:
+        return NotificationType.SYSTEM_ACTIVITY
+    return NotificationType.SYSTEM_UPDATE
+
+
+def _redirect_target_for_role(*, role: str, loan: Loan) -> str:
+    if role == RoleChoices.BORROWER:
+        return "/portal"
+    borrower_uuid = getattr(loan.borrower, "uuid", None)
+    if borrower_uuid:
+        return f"/borrowers/{borrower_uuid}"
+    return "/borrowers"
 
 
 def sync_due_alert_notifications_for_loan(loan: Loan, *, today: date | None = None) -> None:
@@ -45,14 +101,13 @@ def sync_due_alert_notifications_for_loan(loan: Loan, *, today: date | None = No
 
     active_qs = Notification.objects.filter(
         loan=loan,
-        type=NotificationType.LOAN_DUE_ALERT,
         is_active=True,
     )
 
     is_eligible = (
         loan.status != LoanStatus.CLOSED
         and (loan.outstanding_balance or 0) > 0
-        and alert_state.alert_active
+        and (alert_state.alert_active or alert_state.is_overdue)
         and alert_state.due_date is not None
     )
 
@@ -65,21 +120,41 @@ def sync_due_alert_notifications_for_loan(loan: Loan, *, today: date | None = No
         active_qs.update(is_active=False, resolved_at=timezone.now())
         return
 
-    message = _build_due_alert_message(loan, days_to_due=alert_state.days_to_due, due_date=alert_state.due_date)
-
     # Resolve stale active notifications for the same loan if due date changed.
     active_qs.exclude(due_date=alert_state.due_date).update(is_active=False, resolved_at=timezone.now())
 
     for user_id in recipients:
+        user = User.objects.filter(id=user_id).only("id", "role").first()
+        if not user:
+            continue
+
+        notification_type = _notification_type_for_role(
+            role=user.role,
+            is_overdue=alert_state.is_overdue,
+            days_to_due=alert_state.days_to_due,
+        )
+        message = _build_due_alert_message(
+            loan,
+            days_to_due=alert_state.days_to_due,
+            due_date=alert_state.due_date,
+            role=user.role,
+            is_overdue=alert_state.is_overdue,
+        )
+        redirect_target = _redirect_target_for_role(role=user.role, loan=loan)
+        external_key = f"loan:{loan.id}:{notification_type}:{alert_state.due_date}"
+
         Notification.objects.update_or_create(
             user_id=user_id,
-            loan=loan,
-            type=NotificationType.LOAN_DUE_ALERT,
-            due_date=alert_state.due_date,
+            external_key=external_key,
             is_active=True,
             defaults={
+                "role": user.role,
+                "loan": loan,
                 "borrower_id": loan.borrower_id,
+                "type": notification_type,
                 "message": message,
+                "redirect_target": redirect_target,
+                "due_date": alert_state.due_date,
                 "is_read": False,
                 "resolved_at": None,
             },

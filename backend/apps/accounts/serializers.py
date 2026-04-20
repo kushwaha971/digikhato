@@ -10,12 +10,12 @@ class AccountSerializer(serializers.ModelSerializer):
     class Meta:
         model = Account
         fields = [
-            'id', 'borrower', 'borrower_name', 'borrower_mobile',
+            'id', 'uuid', 'borrower', 'borrower_name', 'borrower_mobile',
             'amount_given', 'daily_interest_rate', 'duration_days',
             'start_date', 'status', 'amount_paid', 'outstanding_amount',
             'collections_count', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'start_date', 'amount_paid', 'outstanding_amount', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'uuid', 'start_date', 'amount_paid', 'outstanding_amount', 'created_at', 'updated_at']
 
     def get_collections_count(self, obj):
         return obj.daily_collections.count()
@@ -24,7 +24,8 @@ class AccountSerializer(serializers.ModelSerializer):
 class AccountCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Account
-        fields = ['borrower', 'amount_given', 'daily_interest_rate', 'duration_days']
+        fields = ['id', 'uuid', 'borrower', 'amount_given', 'daily_interest_rate', 'duration_days']
+        read_only_fields = ['id', 'uuid']
 
     def validate_amount_given(self, value):
         if value <= 0:

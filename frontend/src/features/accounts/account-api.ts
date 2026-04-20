@@ -3,6 +3,7 @@ import { PaginatedResponse } from "@/types/api";
 
 export interface Account {
   id: number;
+  uuid: string;
   borrower: number;
   amount_given: string | number;
   amount_paid: string | number;
@@ -29,7 +30,7 @@ export const accountApi = api.injectEndpoints({
       query: (params) => ({ url: "accounts/", params }),
       providesTags: ["Account"],
     }),
-    getAccount: builder.query<Account, number>({
+    getAccount: builder.query<Account, string>({
       query: (id) => ({ url: `accounts/${id}/` }),
       providesTags: (result, error, id) => [{ type: "Account", id }],
     }),
@@ -37,11 +38,11 @@ export const accountApi = api.injectEndpoints({
       query: (body) => ({ url: "accounts/", method: "POST", data: body }),
       invalidatesTags: ["Account", "Dashboard"],
     }),
-    updateAccount: builder.mutation<Account, { id: number } & Partial<Account>>({
+    updateAccount: builder.mutation<Account, { id: string } & Partial<Account>>({
       query: ({ id, ...body }) => ({ url: `accounts/${id}/`, method: "PATCH", data: body }),
       invalidatesTags: (result, error, { id }) => [{ type: "Account", id }, "Account", "Dashboard"],
     }),
-    deleteAccount: builder.mutation<void, number>({
+    deleteAccount: builder.mutation<void, string>({
       query: (id) => ({ url: `accounts/${id}/`, method: "DELETE" }),
       invalidatesTags: ["Account", "Dashboard"],
     }),
@@ -71,6 +72,7 @@ export const accountApi = api.injectEndpoints({
 export interface DailyCollection {
   id: number;
   account: number;
+  account_uuid?: string;
   borrower?: number;
   date: string;
   payment: string | number;

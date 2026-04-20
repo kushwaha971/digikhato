@@ -14,6 +14,7 @@ import {
 import { Screen } from "@/components/layout/Screen";
 import { useTheme } from "@/components/layout/ThemeProvider";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import {
   useChangePasswordMutation,
@@ -52,6 +53,7 @@ export default function SettingsPage() {
 
   const [profileSaved, setProfileSaved] = useState(false);
   const [passwordSaved, setPasswordSaved] = useState(false);
+  const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
 
   const profileInitial = useMemo<ProfileFormValues>(
     () => ({
@@ -236,8 +238,8 @@ export default function SettingsPage() {
               onBlur={passwordFormik.handleBlur}
               touched={newPasswordState.touched}
               error={newPasswordState.error}
-              placeholder="Strong password"
-              helperText="At least 8 chars, one uppercase, one number, one special char"
+              placeholder="New password"
+              helperText="Minimum 8 characters"
               required
             />
 
@@ -299,12 +301,31 @@ export default function SettingsPage() {
 
         <div className="app-panel">
           <div className="p-4">
-            <Button variant="danger" disabled={isLoggingOut} onClick={handleLogout} type="button" fullWidth={false}>
+            <Button
+              variant="danger"
+              disabled={isLoggingOut}
+              onClick={() => setConfirmLogoutOpen(true)}
+              type="button"
+              fullWidth={false}
+            >
               {isLoggingOut ? "Logging out…" : "Logout"}
             </Button>
           </div>
         </div>
       </div>
+      <ConfirmDialog
+        open={confirmLogoutOpen}
+        onClose={() => setConfirmLogoutOpen(false)}
+        onConfirm={async () => {
+          await handleLogout();
+          setConfirmLogoutOpen(false);
+        }}
+        isLoading={isLoggingOut}
+        title="Confirm Logout"
+        description="Are you sure you want to log out?"
+        confirmLabel="Log out"
+        confirmVariant="danger"
+      />
     </Screen>
   );
 }

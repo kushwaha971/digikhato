@@ -1,11 +1,12 @@
 import { api } from "@/store/api";
+import type { TeamMemberRole } from "@/constants/form-options";
 import type { AuthUser } from "@/store/auth-slice";
 
 export interface CreateTeamMemberRequest {
   full_name: string;
   mobile_number: string;
   password: string;
-  role: "admin" | "collector" | "borrower";
+  role: TeamMemberRole;
   branch_name?: string;
 }
 

@@ -35,7 +35,7 @@ export const authApi = api.injectEndpoints({
       query: (data) => ({ url: "auth/login/", method: "POST", data }),
       invalidatesTags: ["Auth"],
     }),
-    signup: builder.mutation<AuthUser, SignupRequest>({
+    signup: builder.mutation<LoginResponse, SignupRequest>({
       query: (data) => ({ url: "auth/signup/", method: "POST", data, successMessage: "Account created successfully." }),
       invalidatesTags: ["Auth"],
     }),

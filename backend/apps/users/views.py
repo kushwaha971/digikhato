@@ -49,6 +49,20 @@ def _clear_refresh_cookie(response):
     response.delete_cookie(REFRESH_COOKIE, path=COOKIE_PATH)
 
 
+def _build_auth_response(user, *, response_status=status.HTTP_200_OK):
+    refresh = MobileTokenObtainSerializer.get_token(user)
+    access = refresh.access_token
+    response = Response(
+        {
+            "access": str(access),
+            "user": UserSerializer(user).data,
+        },
+        status=response_status,
+    )
+    _set_refresh_cookie(response, str(refresh))
+    return response
+
+
 class LoginView(APIView):
     permission_classes = [AllowAny]
 
@@ -59,14 +73,7 @@ class LoginView(APIView):
         except TokenError as e:
             return Response({"detail": str(e)}, status=status.HTTP_401_UNAUTHORIZED)
 
-        access = serializer.validated_data["access"]
-        refresh = serializer.validated_data["refresh"]
-
-        response = Response({
-            "access": str(access),
-            "user": UserSerializer(serializer.user).data,
-        })
-        _set_refresh_cookie(response, str(refresh))
+        response = _build_auth_response(serializer.user)
 
         log_action(request, "login", model_name="User",
                    object_id=serializer.user.pk,
@@ -116,9 +123,10 @@ class SignupView(APIView):
         serializer = SignupSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
+        response = _build_auth_response(user, response_status=status.HTTP_201_CREATED)
         log_action(request, "signup", model_name="User",
                    object_id=user.pk, detail=f"Signup: {user.mobile_number}")
-        return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
+        return response
 
 
 class LogoutView(APIView):

@@ -14,6 +14,8 @@ import {
 } from "@/components/forms/system";
 import { Button } from "@/components/ui/Button";
 import { useSignupMutation } from "@/features/auth/auth-api";
+import { setAuth } from "@/store/auth-slice";
+import { useAppDispatch } from "@/store/hooks";
 import {
   focusFirstInvalidField,
   mapBackendErrorsToFormik,
@@ -31,7 +33,21 @@ const SIGNUP_FIELDS: Array<keyof SignupFormValues> = [
   "confirm_password",
 ];
 
+function getPostLoginRedirect(role: string | undefined): string {
+  switch (role) {
+    case "super_admin":
+      return "/super-admin/dashboard";
+    case "borrower":
+      return "/portal";
+    case "admin":
+    case "collector":
+    default:
+      return "/dashboard";
+  }
+}
+
 export default function SignupPage() {
+  const dispatch = useAppDispatch();
   const router = useRouter();
   const [signup, { isLoading }] = useSignupMutation();
 
@@ -44,18 +60,20 @@ export default function SignupPage() {
       helpers.setStatus(undefined);
       try {
         const normalized = trimObjectValues(values);
-        await signup({
+        const result = await signup({
           full_name: normalized.full_name,
           mobile_number: normalizeMobile(normalized.mobile_number),
           password: normalized.password,
           role: "admin",
         }).unwrap();
+        dispatch(setAuth({ access: result.access, user: result.user }));
+        localStorage.setItem("accessToken", result.access);
 
         if (typeof window !== "undefined") {
-          window.location.href = "/login";
+          window.location.href = getPostLoginRedirect(result.user?.role);
           return;
         }
-        router.replace("/login");
+        router.replace(getPostLoginRedirect(result.user?.role));
       } catch (error) {
         const parsed = mapBackendErrorsToFormik(error, helpers, SIGNUP_FIELDS);
         focusFirstInvalidField(Object.keys(parsed.fieldErrors));
@@ -120,8 +138,8 @@ export default function SignupPage() {
               onBlur={formik.handleBlur}
               touched={passwordState.touched}
               error={passwordState.error}
-              placeholder="Set a strong password"
-              helperText="At least 8 chars, one uppercase, one number, one special char"
+              placeholder="Set password"
+              helperText="Minimum 8 characters"
               required
               data-testid="signup-password"
             />

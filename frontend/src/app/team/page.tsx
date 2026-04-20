@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useFormik } from "formik";
 
+import { TEAM_MEMBER_ROLE_OPTIONS, type TeamMemberRole } from "@/constants/form-options";
 import {
   FormErrorBanner,
   MobileNumberInput,
@@ -35,9 +36,7 @@ import {
   type TeamMemberFormValues,
 } from "@/validation";
 
-type MemberRole = "admin" | "collector" | "borrower";
-
-const ROLE_VARIANT: Record<MemberRole, "primary" | "success" | "neutral"> = {
+const ROLE_VARIANT: Record<TeamMemberRole, "primary" | "success" | "neutral"> = {
   admin: "primary",
   collector: "success",
   borrower: "neutral",
@@ -137,7 +136,7 @@ export default function TeamPage() {
                   </div>
                   <p className="text-xs text-muted">{member.mobile_number}</p>
                 </div>
-                <Badge variant={ROLE_VARIANT[member.role as MemberRole] ?? "neutral"} className="capitalize">
+                <Badge variant={ROLE_VARIANT[member.role as TeamMemberRole] ?? "neutral"} className="capitalize">
                   {member.role}
                 </Badge>
               </div>
@@ -224,8 +223,8 @@ export default function TeamPage() {
             onBlur={formik.handleBlur}
             touched={passwordState.touched}
             error={passwordState.error}
-            placeholder="Strong password"
-            helperText="At least 8 chars, one uppercase, one number, one special char"
+            placeholder="Set password"
+            helperText="Minimum 8 characters"
             required
           />
 
@@ -239,8 +238,13 @@ export default function TeamPage() {
             error={roleState.error}
             required
           >
-            <option value="collector">Collector</option>
-            <option value="admin">Admin</option>
+            {TEAM_MEMBER_ROLE_OPTIONS
+              .filter((option) => option.value !== "borrower")
+              .map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </SelectInput>
         </form>
       </Modal>

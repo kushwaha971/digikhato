@@ -1,6 +1,8 @@
+import uuid as _uuid_lib
 from decimal import Decimal
 
 from django.db.models import Sum, Count, Q
+from django.shortcuts import get_object_or_404
 from rest_framework import viewsets, permissions, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -20,6 +22,17 @@ class AccountViewSet(viewsets.ModelViewSet):
     search_fields = ['borrower__name', 'borrower__mobile_number']
     ordering_fields = ['created_at', 'amount_given', 'outstanding_amount']
     ordering = ['-created_at']
+
+    def get_object(self):
+        queryset = self.filter_queryset(self.get_queryset())
+        pk = self.kwargs.get("pk", "")
+        try:
+            _uuid_lib.UUID(str(pk))
+            obj = get_object_or_404(queryset, uuid=pk)
+        except (ValueError, AttributeError):
+            obj = get_object_or_404(queryset, pk=pk)
+        self.check_object_permissions(self.request, obj)
+        return obj
 
     def get_queryset(self):
         user = self.request.user

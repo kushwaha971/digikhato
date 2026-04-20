@@ -2,13 +2,21 @@
 
 import clsx from "clsx";
 import {
+  Children,
+  type ChangeEvent,
   type ChangeEventHandler,
   type FocusEventHandler,
+  type FocusEvent,
   type InputHTMLAttributes,
   type ReactNode,
+  type ReactElement,
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
+  isValidElement,
+  useEffect,
   useId,
+  useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -188,6 +196,12 @@ export type SelectInputProps = BaseFormFieldProps &
     options?: Array<{ label: string; value: string | number; disabled?: boolean }>;
   };
 
+type NormalizedSelectOption = {
+  label: string;
+  value: string;
+  disabled?: boolean;
+};
+
 export function SelectInput({
   label,
   name,
@@ -198,6 +212,7 @@ export function SelectInput({
   error,
   required,
   disabled,
+  placeholder,
   helperText,
   readOnly,
   id,
@@ -205,13 +220,87 @@ export function SelectInput({
   options,
   children,
   "data-testid": dataTestId,
-  ...rest
 }: SelectInputProps) {
   const generated = useId();
   const inputId = id ?? `${name}-${generated}`;
   const errorId = `${inputId}-error`;
   const helperId = `${inputId}-helper`;
   const hasError = shouldShowError({ touched, error });
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  const normalizedOptions = useMemo<NormalizedSelectOption[]>(() => {
+    if (options?.length) {
+      return options.map((option) => ({
+        label: option.label,
+        value: String(option.value),
+        disabled: option.disabled,
+      }));
+    }
+
+    return Children.toArray(children)
+      .filter((child): child is ReactElement<{ value?: string | number; disabled?: boolean; children?: ReactNode }> => (
+        isValidElement(child) && child.type === "option"
+      ))
+      .map((child) => {
+        const optionValue = child.props.value ?? "";
+        const rawLabel = child.props.children;
+        const optionLabel = typeof rawLabel === "string" ? rawLabel : String(rawLabel ?? optionValue);
+        return {
+          label: optionLabel,
+          value: String(optionValue),
+          disabled: child.props.disabled,
+        };
+      });
+  }, [children, options]);
+
+  const selectedValue = String(value ?? "");
+  const selectedOption = normalizedOptions.find((option) => option.value === selectedValue);
+
+  const emitChange = (nextValue: string) => {
+    const syntheticEvent = {
+      target: { name, value: nextValue },
+      currentTarget: { name, value: nextValue },
+    } as unknown as ChangeEvent<HTMLSelectElement>;
+    onChange(syntheticEvent);
+  };
+
+  const emitBlur = () => {
+    if (!onBlur) return;
+    const syntheticEvent = {
+      target: { name, value: selectedValue },
+      currentTarget: { name, value: selectedValue },
+    } as unknown as FocusEvent<HTMLSelectElement>;
+    onBlur(syntheticEvent);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleOutside = (event: MouseEvent) => {
+      if (!rootRef.current) return;
+      if (rootRef.current.contains(event.target as Node)) return;
+      setOpen(false);
+      emitBlur();
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        emitBlur();
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutside);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handleOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [open, selectedValue]);
+
+  const canOpen = !(disabled || readOnly);
 
   return (
     <FormFieldWrapper
@@ -225,38 +314,100 @@ export function SelectInput({
       helperId={helperId}
       className={className}
     >
-      <div className="relative">
-        <select
+      <div className="relative" ref={rootRef}>
+        <button
           id={inputId}
           name={name}
-          value={value ?? ""}
-          onChange={onChange as ChangeEventHandler<HTMLSelectElement>}
-          onBlur={onBlur as FocusEventHandler<HTMLSelectElement>}
-          required={required}
-          disabled={disabled || readOnly}
+          type="button"
+          disabled={!canOpen}
           aria-invalid={hasError}
+          aria-expanded={open}
+          aria-haspopup="listbox"
           aria-describedby={describedById(hasError, errorId, helperText, helperId)}
           className={clsx(
             selectBaseClass,
+            "pr-10 text-left",
             hasError
               ? "border-danger-500 focus:border-danger-500 focus:ring-danger-500/25"
               : "border-border hover:border-border-strong focus:border-primary-500 focus:ring-primary-500/20",
           )}
           data-testid={dataTestId}
-          {...rest}
+          onClick={() => canOpen && setOpen((prev) => !prev)}
+          onBlur={(event) => {
+            const next = event.relatedTarget as Node | null;
+            if (next && rootRef.current?.contains(next)) return;
+            setOpen(false);
+            emitBlur();
+          }}
+          onKeyDown={(event) => {
+            if (!canOpen) return;
+            if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              setOpen(true);
+            }
+          }}
         >
-          {options?.map((option) => (
-            <option key={String(option.value)} value={option.value} disabled={option.disabled}>
-              {option.label}
-            </option>
-          ))}
-          {children}
-        </select>
+          <span className={clsx(!selectedOption && "text-muted/70")}>
+            {selectedOption?.label ?? placeholder ?? "Select an option"}
+          </span>
+        </button>
+
         <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-muted">
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg
+            className={clsx("h-4 w-4 transition-transform", open && "rotate-180")}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
           </svg>
         </span>
+
+        {open && canOpen && (
+          <div
+            className="absolute z-40 mt-2 w-full overflow-hidden rounded-xl border border-border bg-surface shadow-modal"
+            role="listbox"
+            aria-labelledby={inputId}
+          >
+            <ul className="max-h-56 overflow-auto py-1">
+              {normalizedOptions.map((option) => {
+                const isSelected = option.value === selectedValue;
+                return (
+                  <li key={option.value}>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={isSelected}
+                      disabled={option.disabled}
+                      className={clsx(
+                        "flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors",
+                        option.disabled
+                          ? "cursor-not-allowed text-muted/50"
+                          : "text-text hover:bg-surface2",
+                        isSelected && "bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300",
+                      )}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        if (option.disabled) return;
+                        emitChange(option.value);
+                        setOpen(false);
+                        emitBlur();
+                      }}
+                    >
+                      <span>{option.label}</span>
+                      {isSelected ? (
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : null}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
       </div>
     </FormFieldWrapper>
   );

@@ -85,11 +85,12 @@ class CollectionSerializer(serializers.ModelSerializer):
 class DailyCollectionSerializer(serializers.ModelSerializer):
     borrower_name = serializers.CharField(source='account.borrower.name', read_only=True)
     borrower_mobile = serializers.CharField(source='account.borrower.mobile_number', read_only=True)
+    account_uuid = serializers.UUIDField(source="account.uuid", read_only=True)
 
     class Meta:
         model = DailyCollection
-        fields = ['id', 'account', 'borrower_name', 'borrower_mobile', 'payment', 'date', 'collected_by', 'created_at']
-        read_only_fields = ['id', 'collected_by', 'created_at']
+        fields = ['id', 'account', 'account_uuid', 'borrower_name', 'borrower_mobile', 'payment', 'date', 'collected_by', 'created_at']
+        read_only_fields = ['id', 'account_uuid', 'collected_by', 'created_at']
 
     def create(self, validated_data):
         validated_data['collected_by'] = self.context['request'].user

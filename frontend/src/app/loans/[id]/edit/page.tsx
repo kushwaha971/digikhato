@@ -10,7 +10,7 @@ import type { LoanFormValues } from "@/validation";
 export default function EditLoanPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const id = Number(params.id);
+  const id = params.id;
   const { data: loan } = useGetLoanQuery(id, { skip: !id });
   const [updateLoan] = useUpdateLoanMutation();
 

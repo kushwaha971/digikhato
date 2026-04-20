@@ -4,19 +4,32 @@ from django.db.models import Q
 
 from apps.borrowers.models import Borrower
 from apps.common.models import TimeStampedModel
+from apps.common.constants import RoleChoices
 from apps.loans.models import Loan
 
 
 class NotificationType(models.TextChoices):
+    COLLECTION_TASK = "collection_task", "Collection Task"
+    OVERDUE_LOAN = "overdue_loan", "Overdue Loan"
+    FOLLOW_UP = "follow_up", "Follow Up"
+    REPAYMENT_REMINDER = "repayment_reminder", "Repayment Reminder"
+    DUE_ALERT = "due_alert", "Due Alert"
+    OVERDUE_ALERT = "overdue_alert", "Overdue Alert"
+    SYSTEM_ACTIVITY = "system_activity", "System Activity"
+    ESCALATION = "escalation", "Escalation"
+    SYSTEM_UPDATE = "system_update", "System Update"
     LOAN_DUE_ALERT = "loan_due_alert", "Loan Due Alert"
 
 
 class Notification(TimeStampedModel):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications")
+    role = models.CharField(max_length=20, choices=RoleChoices.choices, db_index=True)
     loan = models.ForeignKey(Loan, on_delete=models.SET_NULL, null=True, blank=True, related_name="notifications")
     borrower = models.ForeignKey(Borrower, on_delete=models.SET_NULL, null=True, blank=True, related_name="notifications")
     type = models.CharField(max_length=50, choices=NotificationType.choices, db_index=True)
     message = models.CharField(max_length=255)
+    redirect_target = models.CharField(max_length=255, blank=True, default="")
+    external_key = models.CharField(max_length=120, null=True, blank=True, db_index=True)
     due_date = models.DateField(null=True, blank=True, db_index=True)
     is_read = models.BooleanField(default=False, db_index=True)
     is_active = models.BooleanField(default=True, db_index=True)
@@ -26,13 +39,14 @@ class Notification(TimeStampedModel):
         ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["user", "is_active", "is_read"]),
-            models.Index(fields=["type", "due_date"]),
+            models.Index(fields=["type", "due_date", "role"]),
+            models.Index(fields=["user", "created_at"]),
         ]
         constraints = [
             models.UniqueConstraint(
-                fields=["user", "loan", "type", "due_date"],
-                condition=Q(is_active=True),
-                name="uniq_active_notification_user_loan_type_due",
+                fields=["user", "external_key"],
+                condition=Q(is_active=True) & Q(external_key__isnull=False),
+                name="uniq_active_notification_user_external_key",
             )
         ]
 

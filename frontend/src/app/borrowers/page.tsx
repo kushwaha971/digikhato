@@ -2,24 +2,23 @@
 
 import Link from "next/link";
 import { useCallback, useState } from "react";
+import { useRouter } from "next/navigation";
 
+import { BorrowerForm } from "@/components/forms";
+import { BORROWER_STATUS_OPTIONS } from "@/constants/form-options";
 import { Screen } from "@/components/layout/Screen";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { FilterSelect, ResponsiveFilterPanel } from "@/components/ui/ResponsiveFilterPanel";
 import { SkeletonList } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Modal } from "@/components/ui/Modal";
 import { StickyGlobalSearchBar } from "@/components/business/StickyGlobalSearchBar";
 import { useInfiniteItems } from "@/hooks/useInfiniteItems";
-import { useListBorrowersQuery } from "@/features/borrowers/borrower-api";
+import { useAddBorrowerMutation, useListBorrowersQuery } from "@/features/borrowers/borrower-api";
 import type { Borrower } from "@/features/borrowers/borrower-api";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
-
-const STATUS_OPTIONS = [
-  { label: "All", value: "" },
-  { label: "Active", value: "active" },
-  { label: "Inactive", value: "inactive" },
-];
+import type { BorrowerFormValues } from "@/validation";
 
 const statusVariant = {
   active: "success" as const,
@@ -27,11 +26,21 @@ const statusVariant = {
 };
 
 export default function BorrowerListPage() {
+  const router = useRouter();
   const { isAdmin } = useRoleAccess();
+  const [addBorrower] = useAddBorrowerMutation();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [draftStatus, setDraftStatus] = useState(status);
   const [page, setPage] = useState(1);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [tempPasswordInfo, setTempPasswordInfo] = useState<{
+    borrowerUuid: string;
+    name: string;
+    mobile: string;
+    password: string;
+  } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const { data, isFetching } = useListBorrowersQuery({
     search: search || undefined,
@@ -59,15 +68,46 @@ export default function BorrowerListPage() {
     setPage(1);
   }
 
+  const onCreateBorrower = async (values: BorrowerFormValues) => {
+    const borrower = await addBorrower(values).unwrap();
+    setShowAddModal(false);
+
+    if (borrower.temporary_password) {
+      setTempPasswordInfo({
+        borrowerUuid: borrower.uuid,
+        name: values.name,
+        mobile: values.mobile_number,
+        password: borrower.temporary_password,
+      });
+    } else {
+      router.push(`/borrowers/${borrower.uuid}`);
+    }
+  };
+
+  const handleCopyPassword = () => {
+    if (!tempPasswordInfo) return;
+    navigator.clipboard.writeText(tempPasswordInfo.password).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleContinueToBorrower = () => {
+    if (!tempPasswordInfo) return;
+    const next = tempPasswordInfo.borrowerUuid;
+    setTempPasswordInfo(null);
+    setCopied(false);
+    router.push(`/borrowers/${next}`);
+  };
+
   return (
     <Screen
       title="Borrowers"
       actions={
         <div className="flex items-center gap-2">
           {isAdmin ? (
-            <Link href="/borrowers/add">
-              <Button size="sm" fullWidth={false}>+ Add Borrower</Button>
-            </Link>
+            <Button size="sm" fullWidth={false} onClick={() => setShowAddModal(true)}>
+              + Add Borrower
+            </Button>
           ) : null}
           <ResponsiveFilterPanel
             title="Filter Borrowers"
@@ -80,7 +120,7 @@ export default function BorrowerListPage() {
               value={draftStatus}
               onChange={(e) => setDraftStatus(e.target.value)}
             >
-              {STATUS_OPTIONS.map((option) => (
+              {BORROWER_STATUS_OPTIONS.map((option) => (
                 <option key={option.value || "all"} value={option.value}>{option.label}</option>
               ))}
             </FilterSelect>
@@ -103,7 +143,7 @@ export default function BorrowerListPage() {
         <EmptyState
           title="No borrowers found"
           description={search || status ? "Try different filters." : "Add your first borrower to get started."}
-          action={isAdmin ? { label: "Add Borrower", onClick: () => globalThis.location.assign("/borrowers/add") } : undefined}
+          action={isAdmin ? { label: "Add Borrower", onClick: () => setShowAddModal(true) } : undefined}
         />
       )}
 
@@ -123,6 +163,66 @@ export default function BorrowerListPage() {
           )}
         </>
       )}
+
+      <Modal
+        open={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        title="Add Borrower"
+        description="Create a borrower account with mobile login."
+        size="sm"
+      >
+        <BorrowerForm
+          onSubmit={onCreateBorrower}
+          onCancel={() => setShowAddModal(false)}
+          submitLabel="Create Borrower"
+          showPasswordField
+          requirePassword
+        />
+      </Modal>
+
+      <Modal
+        open={Boolean(tempPasswordInfo)}
+        onClose={handleContinueToBorrower}
+        title="Borrower Account Created"
+        size="sm"
+        footer={
+          <Button onClick={handleContinueToBorrower} fullWidth>
+            Continue to Borrower
+          </Button>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-muted">
+            A login account has been created for{" "}
+            <span className="font-semibold text-text">{tempPasswordInfo?.name}</span>.
+            Share these credentials with the borrower.
+          </p>
+          <div className="app-panel p-4 space-y-3 bg-surface2">
+            <div>
+              <p className="text-xs text-muted mb-1">Mobile Number</p>
+              <p className="text-sm font-semibold text-text font-mono">{tempPasswordInfo?.mobile}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted mb-1">Temporary Password</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-bold text-text font-mono tracking-widest flex-1">
+                  {tempPasswordInfo?.password}
+                </p>
+                <button
+                  type="button"
+                  onClick={handleCopyPassword}
+                  className="text-xs text-primary-600 hover:underline font-medium flex-shrink-0"
+                >
+                  {copied ? "Copied!" : "Copy"}
+                </button>
+              </div>
+            </div>
+          </div>
+          <p className="text-xs text-danger-600 font-medium">
+            Note: This password will not be shown again. Save it now.
+          </p>
+        </div>
+      </Modal>
     </Screen>
   );
 }
@@ -131,7 +231,7 @@ function BorrowerCard({ borrower }: { borrower: Borrower }) {
   return (
     <Link href={`/borrowers/${borrower.uuid}`} className="block">
       <div className={`app-panel p-4 card-clickable h-full ${
-        borrower.has_alert ? "border border-danger-400 bg-danger-50/40 dark:bg-danger-900/10" : ""
+        borrower.has_alert ? "border border-danger-300 bg-danger-50/30 dark:bg-danger-900/10" : ""
       }`}>
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-3 min-w-0">

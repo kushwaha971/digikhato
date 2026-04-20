@@ -6,20 +6,18 @@ import { Modal } from "@/components/ui/Modal";
 interface ForceResetPasswordModalProps {
   open: boolean;
   onResetNow: () => void;
-  onLogout: () => void | Promise<void>;
-  isLoggingOut?: boolean;
+  onCancel: () => void;
 }
 
 export function ForceResetPasswordModal({
   open,
   onResetNow,
-  onLogout,
-  isLoggingOut = false,
+  onCancel,
 }: ForceResetPasswordModalProps) {
   return (
     <Modal
       open={open}
-      onClose={() => undefined}
+      onClose={onCancel}
       title="Password reset required"
       description="Please reset your password before continuing."
       size="sm"
@@ -29,17 +27,14 @@ export function ForceResetPasswordModal({
             variant="secondary"
             size="sm"
             type="button"
-            loading={isLoggingOut}
-            disabled={isLoggingOut}
-            onClick={onLogout}
+            onClick={onCancel}
           >
-            Log out
+            Cancel
           </Button>
           <Button
             variant="primary"
             size="sm"
             type="button"
-            disabled={isLoggingOut}
             onClick={onResetNow}
           >
             Yes, reset now

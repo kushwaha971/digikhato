@@ -1,16 +1,19 @@
 "use client";
 
+import { useMemo } from "react";
 import { useFormik } from "formik";
 
 import {
   FormErrorBanner,
   MobileNumberInput,
+  PasswordInput,
   TextArea,
   TextInput,
   formikFieldState,
 } from "@/components/forms/system";
 import { Button } from "@/components/ui/Button";
 import {
+  borrowerCreateValidationSchema,
   borrowerInitialValues,
   borrowerValidationSchema,
   focusFirstInvalidField,
@@ -25,16 +28,25 @@ type BorrowerFormProps = Readonly<{
   onCancel?: () => void;
   defaultValues?: Partial<BorrowerFormValues>;
   submitLabel?: string;
+  showPasswordField?: boolean;
+  requirePassword?: boolean;
 }>;
 
-const BORROWER_FIELDS: Array<keyof BorrowerFormValues> = ["name", "mobile_number", "address", "assigned_agent"];
+const BORROWER_FIELDS: Array<keyof BorrowerFormValues> = ["name", "mobile_number", "address", "assigned_agent", "password"];
 
 export function BorrowerForm({
   onSubmit,
   onCancel,
   defaultValues,
   submitLabel = "Save Borrower",
+  showPasswordField = false,
+  requirePassword = false,
 }: BorrowerFormProps) {
+  const validationSchema = useMemo(
+    () => (showPasswordField && requirePassword ? borrowerCreateValidationSchema : borrowerValidationSchema),
+    [showPasswordField, requirePassword],
+  );
+
   const formik = useFormik<BorrowerFormValues>({
     enableReinitialize: true,
     initialValues: {
@@ -42,7 +54,7 @@ export function BorrowerForm({
       ...defaultValues,
       address: defaultValues?.address ?? "",
     },
-    validationSchema: borrowerValidationSchema,
+    validationSchema,
     validateOnBlur: true,
     validateOnChange: true,
     onSubmit: async (values, helpers) => {
@@ -63,6 +75,7 @@ export function BorrowerForm({
   const nameState = formikFieldState(formik, "name");
   const mobileState = formikFieldState(formik, "mobile_number");
   const addressState = formikFieldState(formik, "address");
+  const passwordState = formikFieldState(formik, "password");
 
   return (
     <form onSubmit={formik.handleSubmit} className="space-y-4" noValidate>
@@ -93,6 +106,22 @@ export function BorrowerForm({
         required
         data-testid="borrower-mobile"
       />
+
+      {showPasswordField ? (
+        <PasswordInput
+          label={requirePassword ? "Login Password" : "Login Password (optional)"}
+          name="password"
+          value={formik.values.password ?? ""}
+          onChange={formik.handleChange}
+          onBlur={formik.handleBlur}
+          touched={passwordState.touched}
+          error={passwordState.error}
+          placeholder="Enter borrower login password"
+          helperText="Minimum 8 characters"
+          required={requirePassword}
+          data-testid="borrower-password"
+        />
+      ) : null}
 
       <TextArea
         label="Address"

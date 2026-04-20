@@ -20,6 +20,12 @@ type AxiosBaseQueryArgs = {
 };
 
 type QueryError = { status?: number; data?: unknown };
+const REAUTH_EXCLUDED_PATHS = ["auth/login/", "auth/signup/", "auth/token/refresh/"];
+
+const shouldAttemptReauth = (url: string) => {
+  const normalized = url.trim().toLowerCase().replace(/^\//, "");
+  return !REAUTH_EXCLUDED_PATHS.some((path) => normalized.includes(path));
+};
 
 const axiosBaseQuery = (): BaseQueryFn<AxiosBaseQueryArgs, unknown, QueryError> =>
   async ({ url, method = "GET", data, params, successMessage, errorMessage, silent = false }, api) => {
@@ -80,7 +86,7 @@ const baseQueryWithReauth: BaseQueryFn<AxiosBaseQueryArgs, unknown, QueryError> 
 ) => {
   let result = await rawQuery(args, api, extraOptions);
 
-  if (result.error?.status === 401) {
+  if (result.error?.status === 401 && shouldAttemptReauth(args.url)) {
     // Silence the 401 snackbar — a new one will appear only if refresh also fails
     // Attempt silent token refresh — cookie is sent automatically
     const refreshResult = await rawQuery(

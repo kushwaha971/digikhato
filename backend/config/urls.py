@@ -13,6 +13,7 @@ from apps.notifications.views import (
     NotificationListView,
     NotificationMarkAllReadView,
     NotificationReadView,
+    NotificationSeedTestView,
 )
 from apps.common.permissions import IsAuthenticatedNonBorrowerWrite
 from apps.users.views import (
@@ -74,5 +75,6 @@ urlpatterns = [
     path("api/notifications/", NotificationListView.as_view(), name="notification-list"),
     path("api/notifications/<int:pk>/read/", NotificationReadView.as_view(), name="notification-read"),
     path("api/notifications/mark-all-read/", NotificationMarkAllReadView.as_view(), name="notification-mark-all-read"),
+    path("api/notifications/seed-test/", NotificationSeedTestView.as_view(), name="notification-seed-test"),
     path("api/", include(router.urls)),
 ]

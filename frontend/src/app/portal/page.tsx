@@ -6,13 +6,12 @@ import Link from "next/link";
 import { Screen } from "@/components/layout/Screen";
 import { Badge } from "@/components/ui/Badge";
 import {
-  FILTER_FIELD_CLASS,
-  FILTER_LABEL_CLASS,
+  FilterSelect,
   ResponsiveFilterPanel,
 } from "@/components/ui/ResponsiveFilterPanel";
 import { SkeletonList } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { useListLoansQuery } from "@/features/loans/loan-api";
+import { useGetAccountsQuery } from "@/features/accounts/account-api";
 import { formatDateDMY } from "@/lib/format";
 import { useAppSelector } from "@/store/hooks";
 
@@ -39,14 +38,11 @@ export default function PortalPage() {
   const [status, setStatus] = useState("");
   const [draftStatus, setDraftStatus] = useState(status);
 
-  const { data: loanData, isLoading } = useListLoansQuery(
-    // Borrower users are already server-scoped by auth user relation.
-    // Passing currentUser.id as borrower filter causes invalid filter usage
-    // because borrower id != user id.
-    { status: status || undefined, ordering: "-updated_at" },
+  const { data: accountData, isLoading } = useGetAccountsQuery(
+    { status: status || undefined, ordering: "-created_at" },
     { skip: !currentUser },
   );
-  const loans = loanData?.results ?? [];
+  const accounts = accountData?.results ?? [];
 
   function applyFilters() {
     setStatus(draftStatus);
@@ -67,20 +63,17 @@ export default function PortalPage() {
           onApply={applyFilters}
           onReset={resetFilters}
         >
-          <div className="grid grid-cols-1 gap-2">
-            <label className={FILTER_LABEL_CLASS}>Status</label>
-            <select
-              value={draftStatus}
-              onChange={(event) => setDraftStatus(event.target.value)}
-              className={FILTER_FIELD_CLASS}
-            >
-              {STATUS_OPTIONS.map((option) => (
-                <option key={option.value || "all"} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <FilterSelect
+            label="Status"
+            value={draftStatus}
+            onChange={(event) => setDraftStatus(event.target.value)}
+          >
+            {STATUS_OPTIONS.map((option) => (
+              <option key={option.value || "all"} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </FilterSelect>
         </ResponsiveFilterPanel>
       }
     >
@@ -96,41 +89,41 @@ export default function PortalPage() {
 
         {isLoading && <SkeletonList count={3} />}
 
-        {!isLoading && loans.length === 0 && (
+        {!isLoading && accounts.length === 0 && (
           <EmptyState
-            title="No loans found"
-            description={status ? "No loans match this status." : "Your loan accounts will appear here once created by your lender."}
+            title="No accounts found"
+            description={status ? "No accounts match this status." : "Your loan accounts will appear here once created by your lender."}
           />
         )}
 
-        {!isLoading && loans.length > 0 && (
+        {!isLoading && accounts.length > 0 && (
           <div className="space-y-3">
-            {loans.map((loan) => (
-              <Link key={loan.id} href={`/portal/accounts/${loan.id}`} className="block">
+            {accounts.map((account) => (
+              <Link key={account.id} href={`/portal/accounts/${account.uuid ?? account.id}`} className="block">
                 <div className="app-panel p-4 card-clickable">
                   <div className="flex items-center justify-between mb-3">
                     <div>
-                      <p className="font-semibold text-text">{loan.loan_code ?? `Loan ID ${loan.id}`}</p>
+                      <p className="font-semibold text-text">{`Account ${account.uuid?.slice(0, 8) ?? account.id}`}</p>
                       <p className="text-xs text-muted">
-                        {formatDateDMY(loan.start_date)} · {loan.tenure_days ? `${loan.tenure_days} days` : "Open-ended"}
+                        {formatDateDMY(account.start_date)} · {account.duration_days ? `${account.duration_days} days` : "Open-ended"}
                       </p>
                     </div>
-                    <Badge variant={STATUS_VARIANT[loan.status] ?? "neutral"} className="capitalize">
-                      {loan.status}
+                    <Badge variant={STATUS_VARIANT[account.status] ?? "neutral"} className="capitalize">
+                      {account.status}
                     </Badge>
                   </div>
                   <div className="grid grid-cols-3 gap-3 text-center">
                     <div>
-                      <p className="text-xs text-muted">Principal</p>
-                      <p className="font-bold text-text">{fmt(loan.principal)}</p>
+                      <p className="text-xs text-muted">Amount Given</p>
+                      <p className="font-bold text-text">{fmt(account.amount_given)}</p>
                     </div>
                     <div>
                       <p className="text-xs text-muted">Paid</p>
-                      <p className="font-bold text-success-600">{fmt(loan.paid_amount)}</p>
+                      <p className="font-bold text-success-600">{fmt(account.amount_paid)}</p>
                     </div>
                     <div>
                       <p className="text-xs text-muted">Outstanding</p>
-                      <p className="font-bold text-warning-600">{fmt(loan.outstanding_balance)}</p>
+                      <p className="font-bold text-warning-600">{fmt(account.outstanding_amount)}</p>
                     </div>
                   </div>
                 </div>

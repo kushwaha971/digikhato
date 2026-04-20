@@ -5,6 +5,7 @@ from decimal import Decimal
 from django.core.cache import cache
 from django.db.models import F
 from django.shortcuts import get_object_or_404
+import django_filters
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, viewsets
 from rest_framework.decorators import action
@@ -109,10 +110,25 @@ class TodayDueListView(ListAPIView):
         return upcoming_due_loans_queryset(qs, days=0, today=date.today()).order_by("borrower__name")
 
 
+class DailyCollectionFilter(django_filters.FilterSet):
+    account = django_filters.CharFilter(method="filter_account")
+
+    class Meta:
+        model = DailyCollection
+        fields = ["account", "date"]
+
+    def filter_account(self, queryset, name, value):
+        try:
+            _uuid_lib.UUID(str(value))
+            return queryset.filter(account__uuid=value)
+        except (ValueError, AttributeError):
+            return queryset.filter(account_id=value)
+
+
 class DailyCollectionViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
-    filterset_fields = ["account", "date"]
+    filterset_class = DailyCollectionFilter
     ordering = ["-date"]
 
     def get_queryset(self):

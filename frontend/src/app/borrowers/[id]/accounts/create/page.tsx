@@ -15,7 +15,7 @@ export default function CreateAccountPage() {
 
   const handleSubmit = async (values: AccountFormValues) => {
     const account = await createAccount(values).unwrap();
-    router.push(`/borrowers/${borrowerId}/accounts/${account.id}`);
+    router.push(`/borrowers/${borrowerId}/accounts/${account.uuid ?? account.id}`);
   };
 
   return (

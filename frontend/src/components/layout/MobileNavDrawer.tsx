@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useLogoutMutation } from "@/features/auth/auth-api";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { clearAuth } from "@/store/auth-slice";
@@ -28,6 +28,7 @@ export function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps) {
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
   const { can, isSuperAdmin, isBorrower } = useRoleAccess();
   const currentUser = useAppSelector((state) => state.auth.currentUser);
+  const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
 
   const [mounted, setMounted] = useState(false);
   const [visible, setVisible] = useState(false);
@@ -154,11 +155,9 @@ export function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps) {
             </div>
           ) : null}
 
-          <ThemeToggle />
-
           <button
             type="button"
-            onClick={handleLogout}
+            onClick={() => setConfirmLogoutOpen(true)}
             disabled={isLoggingOut}
             className="w-full inline-flex items-center justify-center gap-2 h-10 rounded-lg border border-border text-sm font-semibold text-muted hover:text-text hover:bg-surface2 transition-colors disabled:opacity-50"
           >
@@ -169,6 +168,20 @@ export function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps) {
           </button>
         </div>
       </aside>
+
+      <ConfirmDialog
+        open={confirmLogoutOpen}
+        onClose={() => setConfirmLogoutOpen(false)}
+        onConfirm={async () => {
+          await handleLogout();
+          setConfirmLogoutOpen(false);
+        }}
+        isLoading={isLoggingOut}
+        title="Confirm Logout"
+        description="Are you sure you want to log out?"
+        confirmLabel="Log out"
+        confirmVariant="danger"
+      />
     </div>
   );
 }

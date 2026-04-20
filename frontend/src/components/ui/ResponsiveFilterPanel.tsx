@@ -2,6 +2,7 @@
 
 import { ReactNode, SelectHTMLAttributes, useEffect, useRef, useState } from "react";
 
+import { SelectInput } from "@/components/forms/system";
 import { Drawer } from "@/components/ui/Drawer";
 
 export const FILTER_LABEL_CLASS = "text-xs font-semibold text-muted uppercase tracking-wide";
@@ -13,20 +14,23 @@ type FilterSelectProps = SelectHTMLAttributes<HTMLSelectElement> & {
 };
 
 export function FilterSelect({ label, className, children, ...rest }: FilterSelectProps) {
+  const fieldName =
+    rest.name ??
+    (label ? label.toLowerCase().replace(/\s+/g, "_") : "filter_select");
+
   return (
-    <div className="grid grid-cols-1 gap-2">
-      {label ? <span className={FILTER_LABEL_CLASS}>{label}</span> : null}
-      <div className="relative">
-        <select className={[FILTER_FIELD_CLASS, className].filter(Boolean).join(" ")} {...rest}>
-          {children}
-        </select>
-        <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-muted">
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
-        </span>
-      </div>
-    </div>
+    <SelectInput
+      label={label}
+      className={className}
+      name={fieldName}
+      value={rest.value as string | number | undefined}
+      onChange={rest.onChange as NonNullable<FilterSelectProps["onChange"]>}
+      onBlur={rest.onBlur as FilterSelectProps["onBlur"]}
+      required={rest.required}
+      disabled={rest.disabled}
+    >
+      {children}
+    </SelectInput>
   );
 }
 
