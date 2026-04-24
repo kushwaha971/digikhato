@@ -10,6 +10,7 @@ import {
   type Notification,
   useListNotificationsQuery,
   useMarkNotificationReadMutation,
+  useRefreshNotificationsMutation,
 } from "@/features/notifications/notification-api";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { formatDateDMY } from "@/lib/format";
@@ -66,6 +67,7 @@ export default function NotificationsPage() {
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const { data, isLoading, isFetching, refetch } = useListNotificationsQuery({ active: true, page, page_size: 20 });
   const [markRead] = useMarkNotificationReadMutation();
+  const [refreshNotifications, { isLoading: isRefreshingNotifications }] = useRefreshNotificationsMutation();
 
   useEffect(() => {
     if (!data?.results) return;
@@ -105,6 +107,11 @@ export default function NotificationsPage() {
   }, [role]);
 
   const handleRefresh = async () => {
+    try {
+      await refreshNotifications().unwrap();
+    } catch {
+      // If sync fails, still reload what is already available.
+    }
     setItems([]);
     if (page !== 1) {
       setPage(1);
@@ -133,12 +140,12 @@ export default function NotificationsPage() {
         <button
           type="button"
           onClick={handleRefresh}
-          disabled={isFetching}
+          disabled={isFetching || isRefreshingNotifications}
           className="w-9 h-9 rounded-lg border border-border flex items-center justify-center text-muted hover:text-text hover:bg-surface2 transition-colors disabled:opacity-60"
           aria-label="Refresh notifications"
           title="Refresh notifications"
         >
-          <svg className={`w-4 h-4 ${isFetching ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className={`w-4 h-4 ${isFetching || isRefreshingNotifications ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
         </button>

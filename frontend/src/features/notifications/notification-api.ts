@@ -56,6 +56,10 @@ export const notificationApi = api.injectEndpoints({
       query: () => ({ url: "notifications/mark-all-read/", method: "POST" }),
       invalidatesTags: ["Notification"],
     }),
+    refreshNotifications: builder.mutation<{ synced_loans: number }, void>({
+      query: () => ({ url: "notifications/refresh/", method: "POST", silent: true }),
+      invalidatesTags: ["Notification"],
+    }),
     seedTestNotification: builder.mutation<Notification[], { message?: string } | void>({
       query: (payload) => ({ url: "notifications/seed-test/", method: "POST", data: payload ?? {} }),
       invalidatesTags: ["Notification"],
@@ -67,5 +71,6 @@ export const {
   useListNotificationsQuery,
   useMarkNotificationReadMutation,
   useMarkAllNotificationsReadMutation,
+  useRefreshNotificationsMutation,
   useSeedTestNotificationMutation,
 } = notificationApi;

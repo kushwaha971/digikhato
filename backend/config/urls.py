@@ -12,6 +12,7 @@ from apps.reports.views import DailyReportView, LoanReportView, OverdueReportVie
 from apps.notifications.views import (
     NotificationListView,
     NotificationMarkAllReadView,
+    NotificationRefreshView,
     NotificationReadView,
     NotificationSeedTestView,
 )
@@ -75,6 +76,7 @@ urlpatterns = [
     path("api/notifications/", NotificationListView.as_view(), name="notification-list"),
     path("api/notifications/<int:pk>/read/", NotificationReadView.as_view(), name="notification-read"),
     path("api/notifications/mark-all-read/", NotificationMarkAllReadView.as_view(), name="notification-mark-all-read"),
+    path("api/notifications/refresh/", NotificationRefreshView.as_view(), name="notification-refresh"),
     path("api/notifications/seed-test/", NotificationSeedTestView.as_view(), name="notification-seed-test"),
     path("api/", include(router.urls)),
 ]

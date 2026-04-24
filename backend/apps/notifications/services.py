@@ -34,6 +34,42 @@ def _recipient_user_ids_for_loan(loan: Loan) -> list[int]:
     return list(active_users.values_list("id", flat=True))
 
 
+def _effective_tenant_for_user(user):
+    if user.role == RoleChoices.ADMIN:
+        return user
+    if user.role in (RoleChoices.COLLECTOR, RoleChoices.BORROWER) and user.tenant_id:
+        return user.tenant
+    return None
+
+
+def sync_due_alert_notifications_for_user(*, user) -> int:
+    tenant = _effective_tenant_for_user(user)
+
+    # Super admins are platform-level users and are not direct recipients
+    # of borrower-level due alert notifications.
+    if user.role == RoleChoices.SUPER_ADMIN:
+        return 0
+
+    loans = Loan.objects.select_related("borrower", "borrower__tenant")
+
+    if tenant:
+        loans = loans.filter(borrower__tenant=tenant)
+
+    if user.role == RoleChoices.COLLECTOR:
+        loans = loans.filter(borrower__assigned_agent_id=user.id)
+    elif user.role == RoleChoices.BORROWER:
+        borrower_profile = getattr(user, "borrower_profile", None)
+        if not borrower_profile:
+            return 0
+        loans = loans.filter(borrower=borrower_profile)
+
+    synced_loans = 0
+    for loan in loans.iterator():
+        sync_due_alert_notifications_for_loan(loan)
+        synced_loans += 1
+    return synced_loans
+
+
 def _build_due_alert_message(loan: Loan, *, days_to_due: int | None, due_date: date | None, role: str, is_overdue: bool) -> str:
     borrower_name = loan.borrower.name
     if role == RoleChoices.BORROWER:

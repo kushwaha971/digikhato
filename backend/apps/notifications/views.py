@@ -6,7 +6,11 @@ from rest_framework.views import APIView
 
 from apps.notifications.models import Notification, NotificationType
 from apps.notifications.serializers import NotificationSerializer
-from apps.notifications.services import mark_all_notifications_read, mark_notification_read
+from apps.notifications.services import (
+    mark_all_notifications_read,
+    mark_notification_read,
+    sync_due_alert_notifications_for_user,
+)
 
 
 class NotificationPagination(PageNumberPagination):
@@ -53,6 +57,14 @@ class NotificationMarkAllReadView(APIView):
     def post(self, request):
         updated = mark_all_notifications_read(user=request.user)
         return Response({"updated": updated})
+
+
+class NotificationRefreshView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        synced_loans = sync_due_alert_notifications_for_user(user=request.user)
+        return Response({"synced_loans": synced_loans}, status=status.HTTP_200_OK)
 
 
 class NotificationSeedTestView(APIView):
