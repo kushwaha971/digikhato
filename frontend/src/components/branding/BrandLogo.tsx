@@ -31,25 +31,24 @@ const iconSizeClasses: Record<Size, string> = {
   xl: "w-7 h-7",
 };
 
-function BookMark({ size = "md" }: { readonly size?: Size }) {
+export function BookMark({ size = "md" }: { readonly size?: Size }) {
   return (
     <span className={`relative inline-flex flex-shrink-0 items-center justify-center ${markSizeClasses[size]} bg-gradient-to-br from-primary-500 to-primary-700 shadow-soft`}>
-      {/* Book SVG icon */}
       <svg
         className={iconSizeClasses[size]}
         viewBox="0 0 24 24"
         fill="none"
-        stroke="white"
-        strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
       >
-        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-        <line x1="9" y1="7" x2="15" y2="7" />
-        <line x1="9" y1="11" x2="13" y2="11" />
+        {/* Stylised ₹ — two header bars + vertical drop + diagonal */}
+        <line x1="7" y1="6.5" x2="17" y2="6.5" stroke="white" strokeWidth={2.4} />
+        <line x1="7" y1="10.5" x2="15" y2="10.5" stroke="white" strokeWidth={2.2} />
+        {/* Vertical stem */}
+        <line x1="10.5" y1="6.5" x2="10.5" y2="13" stroke="white" strokeWidth={2.2} />
+        {/* Diagonal slash */}
+        <line x1="7.5" y1="10.5" x2="16" y2="18.5" stroke="rgba(255,255,255,0.75)" strokeWidth={2} />
       </svg>
-      {/* Accent dot */}
       <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-primary-400" />
     </span>
   );
@@ -63,10 +62,10 @@ function Content({ size = "md", compact, showTagline, className }: Readonly<Omit
       <BookMark size={resolvedSize} />
       <span className="leading-tight">
         <span className={`block font-bold tracking-tight text-text ${textSizeClasses[resolvedSize]}`}>
-          Daily<span className="text-primary-500">Book</span>
+          Digi<span className="text-primary-500">Khaato</span>
         </span>
         {showTagline ? (
-          <span className="block text-xs font-medium text-muted">Loan Collection Platform</span>
+          <span className="block text-xs font-medium text-muted">Loans, Ledgers &amp; Collections — One Place</span>
         ) : null}
       </span>
     </span>

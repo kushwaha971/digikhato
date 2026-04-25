@@ -51,7 +51,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(({
       disabled={isDisabled}
       className={[
         // Base — pill shape matches Turno CTA buttons
-        "inline-flex items-center justify-center gap-2 rounded-full font-semibold",
+        "inline-flex items-center justify-center gap-2 rounded-full font-semibold whitespace-nowrap",
         "transition-all duration-150 active:scale-[0.98]",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2",
         variantClasses[variant],
