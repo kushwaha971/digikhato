@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
 import { useListBorrowersQuery } from "@/features/borrowers/borrower-api";
+import { ROUTES } from "@/lib/routes";
 
 export function GlobalSearch() {
   const router = useRouter();
@@ -21,7 +22,7 @@ export function GlobalSearch() {
   function handleSelect(id: number) {
     setQuery("");
     setOpen(false);
-    router.push(`/borrowers/${id}`);
+    router.push(ROUTES.app.loans.borrower(id));
   }
 
   function handleBlur() {

@@ -10,10 +10,8 @@ from apps.users.models import User
 
 class BorrowerSerializer(serializers.ModelSerializer):
     accounts_count = serializers.SerializerMethodField()
-    temporary_password = serializers.SerializerMethodField(read_only=True)
     must_reset_password = serializers.SerializerMethodField(read_only=True)
     has_alert = serializers.BooleanField(read_only=True, default=False)
-    password = serializers.CharField(write_only=True, required=False, allow_blank=True, min_length=8)
 
     class Meta:
         model = Borrower
@@ -22,7 +20,6 @@ class BorrowerSerializer(serializers.ModelSerializer):
             "uuid",
             "name",
             "mobile_number",
-            "password",
             "address",
             "photo",
             "id_type",
@@ -34,7 +31,6 @@ class BorrowerSerializer(serializers.ModelSerializer):
             "status",
             "accounts_count",
             "has_alert",
-            "temporary_password",
             "must_reset_password",
             "created_at",
             "updated_at",
@@ -46,9 +42,6 @@ class BorrowerSerializer(serializers.ModelSerializer):
 
     def get_accounts_count(self, obj):
         return obj.accounts.count()
-
-    def get_temporary_password(self, obj):
-        return getattr(obj, "_temporary_password", None)
 
     def get_must_reset_password(self, obj):
         return bool(getattr(obj.user, "must_reset_password", False))
@@ -68,20 +61,13 @@ class BorrowerSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Borrower user belongs to another tenant.")
         return value
 
-    @staticmethod
-    def _generate_temporary_password(length=10):
-        alphabet = string.ascii_letters + string.digits
-        return "".join(secrets.choice(alphabet) for _ in range(length))
-
     def create(self, validated_data):
         request = self.context.get("request")
         tenant = validated_data.get("tenant")
         mobile_number = validated_data["mobile_number"]
         name = validated_data["name"]
         linked_user = validated_data.get("user")
-        supplied_password = (validated_data.pop("password", "") or "").strip()
 
-        temporary_password = None
         if not linked_user:
             linked_user = User.objects.filter(mobile_number=mobile_number).first()
 
@@ -98,14 +84,11 @@ class BorrowerSerializer(serializers.ModelSerializer):
                     linked_user.tenant = tenant
                     linked_user.save(update_fields=["tenant"])
             else:
-                if not supplied_password:
-                    raise serializers.ValidationError(
-                        {"password": "Login password is required."}
-                    )
-                user_password = supplied_password
+                alphabet = string.ascii_letters + string.digits
+                auto_password = "".join(secrets.choice(alphabet) for _ in range(12))
                 linked_user = User.objects.create_user(
                     mobile_number=mobile_number,
-                    password=user_password,
+                    password=auto_password,
                     full_name=name,
                     role=RoleChoices.BORROWER,
                     tenant=tenant,
@@ -114,18 +97,7 @@ class BorrowerSerializer(serializers.ModelSerializer):
                 )
 
         validated_data["user"] = linked_user
-        borrower = super().create(validated_data)
-        if temporary_password:
-            borrower._temporary_password = temporary_password
-        return borrower
+        return super().create(validated_data)
 
     def update(self, instance, validated_data):
-        supplied_password = (validated_data.pop("password", "") or "").strip()
-        borrower = super().update(instance, validated_data)
-
-        if supplied_password and borrower.user_id:
-            borrower.user.set_password(supplied_password)
-            borrower.user.must_reset_password = True
-            borrower.user.save(update_fields=["password", "must_reset_password"])
-
-        return borrower
+        return super().update(instance, validated_data)

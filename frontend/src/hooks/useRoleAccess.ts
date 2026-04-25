@@ -23,7 +23,10 @@ export type Permission =
   | "view:team"
   | "manage:team"
   | "view:settings"
-  | "view:portal";
+  | "view:portal"
+  | "view:customer-ledger"
+  | "view:modules"
+  | "view:notes";
 
 // Collector permissions — Admin inherits all of these (no duplication)
 const COLLECTOR_PERMISSIONS: Permission[] = [
@@ -31,6 +34,9 @@ const COLLECTOR_PERMISSIONS: Permission[] = [
   "view:borrowers",
   "view:loans",
   "add:collection",
+  "view:customer-ledger",
+  "view:modules",
+  "view:notes",
   "view:settings",
 ];
 

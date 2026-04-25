@@ -3,7 +3,6 @@ import { AuthUser } from "@/store/auth-slice";
 
 interface LoginRequest {
   mobile_number: string;
-  password: string;
 }
 
 // Refresh token is now an httpOnly cookie — never returned in the response body.
@@ -15,7 +14,6 @@ interface LoginResponse {
 interface SignupRequest {
   full_name: string;
   mobile_number: string;
-  password: string;
   role: "super_admin" | "admin" | "collector" | "borrower";
   branch_name?: string;
 }

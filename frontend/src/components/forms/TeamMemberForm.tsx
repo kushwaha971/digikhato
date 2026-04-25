@@ -6,7 +6,6 @@ import { TEAM_MEMBER_ROLE_OPTIONS, type TeamMemberRole } from "@/constants/form-
 import {
   FormErrorBanner,
   MobileNumberInput,
-  PasswordInput,
   SelectInput,
   TextInput,
   formikFieldState,
@@ -33,7 +32,6 @@ type TeamMemberFormProps = Readonly<{
 const TEAM_FIELDS: Array<keyof TeamMemberFormValues> = [
   "full_name",
   "mobile_number",
-  "password",
   "role",
   "branch_name",
 ];
@@ -70,7 +68,6 @@ export function TeamMemberForm({
 
   const nameState = formikFieldState(formik, "full_name");
   const mobileState = formikFieldState(formik, "mobile_number");
-  const passwordState = formikFieldState(formik, "password");
   const roleState = formikFieldState(formik, "role");
 
   return (
@@ -101,20 +98,6 @@ export function TeamMemberForm({
         placeholder="10-digit mobile number"
         required
         data-testid="team-member-mobile"
-      />
-
-      <PasswordInput
-        label="Password"
-        name="password"
-        value={formik.values.password}
-        onChange={formik.handleChange}
-        onBlur={formik.handleBlur}
-        touched={passwordState.touched}
-        error={passwordState.error}
-        placeholder="Set password"
-        helperText="Minimum 8 characters"
-        required
-        data-testid="team-member-password"
       />
 
       <SelectInput

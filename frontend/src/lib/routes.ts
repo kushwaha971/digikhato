@@ -1,0 +1,43 @@
+export const ROUTES = {
+  public: {
+    home: "/",
+    login: "/login",
+    signup: "/signup",
+    onboarding: "/onboarding",
+    resetPassword: "/reset-password",
+  },
+  app: {
+    modules: "/modules",
+    settings: "/settings",
+    notifications: "/notifications",
+    portal: "/portal",
+    udhaarbook: {
+      root: "/udhaarbook",
+      party: (id: string | number) => `/udhaarbook/${id}`,
+    },
+    notes: {
+      root: "/notes",
+      new: "/notes/new",
+      detail: (id: string | number) => `/notes/${id}`,
+    },
+    loans: {
+      root: "/loans",
+      dashboard: "/loans/dashboard",
+      borrowers: "/loans/borrowers",
+      borrower: (id: string | number) => `/loans/borrowers/${id}`,
+      addBorrower: "/loans/borrowers/add",
+      collections: "/loans/collections",
+      collection: (id: string | number) => `/loans/collections/${id}`,
+      collectionEdit: (id: string | number) => `/loans/collections/${id}/edit`,
+      collectionsToday: "/loans/collections/today",
+      collectionsHistory: "/loans/collections/history",
+      collectionsEntry: "/loans/collections/entry",
+      reports: "/loans/reports",
+      overdue: "/loans/overdue",
+    },
+    superAdmin: {
+      dashboard: "/super-admin/dashboard",
+      tenants: "/super-admin/tenants",
+    },
+  },
+} as const;

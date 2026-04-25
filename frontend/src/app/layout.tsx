@@ -9,11 +9,23 @@ import { StoreProvider } from "@/store/provider";
 
 export const metadata: Metadata = {
   title: {
-    default: "DailyBook — Daily Collection & Loan Management",
-    template: "%s | DailyBook",
+    default: "DigiKhaato — Digital Khata Book & Loan Management Software",
+    template: "%s | DigiKhaato",
   },
-  description: "DailyBook is a modern loan collection management platform for field agents and administrators.",
+  description: "DigiKhaato is India's all-in-one digital khata book for customer ledger, loan management, library seat booking, and daily collection tracking.",
+  keywords: ["digital khata book", "customer ledger app", "loan management software", "khatabook alternative", "udhar khata app", "daily collection app"],
   manifest: "/manifest.json",
+  icons: {
+    icon: "/icon-192.svg",
+    apple: "/icon-192.svg",
+    shortcut: "/icon-192.svg",
+  },
+  openGraph: {
+    type: "website",
+    siteName: "DigiKhaato",
+    title: "DigiKhaato — Digital Bahi Khata for Every Business",
+    description: "Manage customer credit, loans, library seats, and daily collections from one simple dashboard.",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -3,6 +3,8 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from apps.accounts.views import AccountViewSet
+from apps.customer_ledger.views import LedgerCustomerViewSet
+from apps.notes.views import NoteViewSet
 from apps.borrowers.views import BorrowerViewSet
 from apps.collections.views import CollectionViewSet, DailyCollectionViewSet, TodayDueListView
 from apps.dashboard.views import DashboardSummaryView
@@ -53,6 +55,8 @@ router.register("loans", GuardedLoanViewSet, basename="loan")
 router.register("collections", GuardedCollectionViewSet, basename="collection")
 router.register("accounts", GuardedAccountViewSet, basename="account")
 router.register("daily-collections", GuardedDailyCollectionViewSet, basename="daily-collection")
+router.register("ledger/customers", LedgerCustomerViewSet, basename="ledger-customer")
+router.register("notes", NoteViewSet, basename="note")
 
 urlpatterns = [
     path("admin/", admin.site.urls),

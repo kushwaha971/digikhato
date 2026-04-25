@@ -8,12 +8,12 @@ import { BrandLogo } from "@/components/branding/BrandLogo";
 import {
   FormErrorBanner,
   MobileNumberInput,
-  PasswordInput,
   TextInput,
   formikFieldState,
 } from "@/components/forms/system";
 import { Button } from "@/components/ui/Button";
 import { useSignupMutation } from "@/features/auth/auth-api";
+import { ROUTES } from "@/lib/routes";
 import { setAuth } from "@/store/auth-slice";
 import { useAppDispatch } from "@/store/hooks";
 import {
@@ -29,20 +29,18 @@ import {
 const SIGNUP_FIELDS: Array<keyof SignupFormValues> = [
   "full_name",
   "mobile_number",
-  "password",
-  "confirm_password",
 ];
 
 function getPostLoginRedirect(role: string | undefined): string {
   switch (role) {
     case "super_admin":
-      return "/super-admin/dashboard";
+      return ROUTES.app.superAdmin.dashboard;
     case "borrower":
-      return "/portal";
+      return ROUTES.app.portal;
     case "admin":
     case "collector":
     default:
-      return "/dashboard";
+      return ROUTES.app.udhaarbook.root;
   }
 }
 
@@ -63,16 +61,10 @@ export default function SignupPage() {
         const result = await signup({
           full_name: normalized.full_name,
           mobile_number: normalizeMobile(normalized.mobile_number),
-          password: normalized.password,
           role: "admin",
         }).unwrap();
         dispatch(setAuth({ access: result.access, user: result.user }));
         localStorage.setItem("accessToken", result.access);
-
-        if (typeof window !== "undefined") {
-          window.location.href = getPostLoginRedirect(result.user?.role);
-          return;
-        }
         router.replace(getPostLoginRedirect(result.user?.role));
       } catch (error) {
         const parsed = mapBackendErrorsToFormik(error, helpers, SIGNUP_FIELDS);
@@ -85,8 +77,6 @@ export default function SignupPage() {
 
   const fullNameState = formikFieldState(formik, "full_name");
   const mobileState = formikFieldState(formik, "mobile_number");
-  const passwordState = formikFieldState(formik, "password");
-  const confirmState = formikFieldState(formik, "confirm_password");
 
   return (
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 flex items-center justify-center p-4">
@@ -96,7 +86,7 @@ export default function SignupPage() {
             <BrandLogo size="lg" href="/" />
           </div>
           <h1 className="text-2xl font-bold text-text">Create your account</h1>
-          <p className="text-muted text-sm mt-1">Set up your DailyBook workspace</p>
+          <p className="text-muted text-sm mt-1">Set up your DigiKhaato workspace</p>
         </div>
 
         <div className="app-panel p-6 space-y-4">
@@ -129,35 +119,6 @@ export default function SignupPage() {
               data-testid="signup-mobile-number"
             />
 
-            <PasswordInput
-              label="Password"
-              name="password"
-              autoComplete="new-password"
-              value={formik.values.password}
-              onChange={formik.handleChange}
-              onBlur={formik.handleBlur}
-              touched={passwordState.touched}
-              error={passwordState.error}
-              placeholder="Set password"
-              helperText="Minimum 8 characters"
-              required
-              data-testid="signup-password"
-            />
-
-            <PasswordInput
-              label="Confirm Password"
-              name="confirm_password"
-              autoComplete="new-password"
-              value={formik.values.confirm_password}
-              onChange={formik.handleChange}
-              onBlur={formik.handleBlur}
-              touched={confirmState.touched}
-              error={confirmState.error}
-              placeholder="Re-enter your password"
-              required
-              data-testid="signup-confirm-password"
-            />
-
             <div className="pt-1">
               <Button
                 loading={formik.isSubmitting || isLoading}
@@ -174,7 +135,7 @@ export default function SignupPage() {
 
         <p className="text-center text-sm text-muted mt-4">
           Already have an account?{" "}
-          <Link href="/login" className="text-primary-500 font-medium hover:underline">
+          <Link href={ROUTES.public.login} className="text-primary-500 font-medium hover:underline">
             Sign in
           </Link>
         </p>

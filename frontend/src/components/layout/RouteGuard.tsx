@@ -7,6 +7,7 @@ import { ForceResetPasswordFormModal } from "@/components/auth/ForceResetPasswor
 import { ForceResetPasswordModal } from "@/components/auth/ForceResetPasswordModal";
 import { useChangePasswordMutation, useGetMeQuery } from "@/features/auth/auth-api";
 import { type AppRole } from "@/hooks/useRoleAccess";
+import { ROUTES } from "@/lib/routes";
 import { setAccessToken, setCurrentUser } from "@/store/auth-slice";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 
@@ -19,11 +20,11 @@ interface RouteGuardProps {
 function getDefaultRedirect(role: AppRole): string {
   switch (role) {
     case "super_admin":
-      return "/super-admin/dashboard";
+      return ROUTES.app.superAdmin.dashboard;
     case "borrower":
-      return "/portal";
+      return ROUTES.app.portal;
     default:
-      return "/dashboard";
+      return ROUTES.app.udhaarbook.root;
   }
 }
 
@@ -73,7 +74,7 @@ export function RouteGuard({ children, requiredRoles, redirectTo }: RouteGuardPr
     if (typeof window !== "undefined") {
       window.localStorage.removeItem("accessToken");
     }
-    router.replace("/login");
+    router.replace(ROUTES.public.login);
   }, [dispatch, meError, router]);
 
   useEffect(() => {
@@ -82,7 +83,7 @@ export function RouteGuard({ children, requiredRoles, redirectTo }: RouteGuardPr
     }
 
     if (!effectiveToken) {
-      router.replace("/login");
+      router.replace(ROUTES.public.login);
       return;
     }
 

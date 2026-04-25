@@ -6,11 +6,9 @@ export interface Borrower {
   uuid: string;
   name: string;
   mobile_number: string;
-  password?: string;
   address: string;
   status: "active" | "inactive";
   has_alert?: boolean;
-  temporary_password?: string | null;
   must_reset_password?: boolean;
 }
 

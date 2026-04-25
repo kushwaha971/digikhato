@@ -5,7 +5,6 @@ import type { AuthUser } from "@/store/auth-slice";
 export interface CreateTeamMemberRequest {
   full_name: string;
   mobile_number: string;
-  password: string;
   role: TeamMemberRole;
   branch_name?: string;
 }

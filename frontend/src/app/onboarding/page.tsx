@@ -1,6 +1,7 @@
 "use client";
 
 import { useFormik } from "formik";
+import { useRouter } from "next/navigation";
 
 import { BrandLogo } from "@/components/branding/BrandLogo";
 import {
@@ -22,10 +23,12 @@ import {
   trimObjectValues,
   type OnboardingFormValues,
 } from "@/validation";
+import { ROUTES } from "@/lib/routes";
 
 const ONBOARDING_FIELDS: Array<keyof OnboardingFormValues> = ["business_name", "area_name", "currency"];
 
 export default function OnboardingPage() {
+  const router = useRouter();
   const { data } = useGetBusinessProfileQuery();
   const [updateProfile, { isLoading, isSuccess }] = useUpdateBusinessProfileMutation();
   const [updateMe] = useUpdateMeMutation();
@@ -89,9 +92,9 @@ export default function OnboardingPage() {
               </svg>
             </div>
             <h2 className="text-lg font-bold text-text mb-1">You&apos;re all set!</h2>
-            <p className="text-sm text-muted mb-6">Your workspace is ready. Head to the dashboard to get started.</p>
-            <Button size="lg" fullWidth onClick={() => { globalThis.location.href = "/dashboard"; }}>
-              Go to Dashboard
+            <p className="text-sm text-muted mb-6">Your workspace is ready. Open your apps to get started.</p>
+            <Button size="lg" fullWidth onClick={() => { router.replace(ROUTES.app.loans.dashboard); }}>
+              Go to Apps
             </Button>
           </div>
         ) : (

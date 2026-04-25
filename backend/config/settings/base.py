@@ -28,6 +28,8 @@ INSTALLED_APPS = [
     "apps.dashboard",
     "apps.reports",
     "apps.notifications",
+    "apps.customer_ledger",
+    "apps.notes",
 ]
 
 MIDDLEWARE = [

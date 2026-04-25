@@ -4,34 +4,26 @@ import { TEAM_MEMBER_ROLE_VALUES, type TeamMemberRole } from "@/constants/form-o
 import {
   mobileSchema,
   normalizeMobile,
-  requiredMessage,
   requiredTrimmedString,
 } from "@/validation/common";
 
 export type TeamMemberFormValues = {
   full_name: string;
   mobile_number: string;
-  password: string;
   role: TeamMemberRole;
   branch_name?: string;
 };
 
-const passwordSchema = Yup.string()
-  .required(requiredMessage("Password"))
-  .min(8, "Password must be at least 8 characters");
-
 export const teamMemberValidationSchema: Yup.ObjectSchema<TeamMemberFormValues> = Yup.object({
   full_name: requiredTrimmedString("Full name", 2, 120),
   mobile_number: mobileSchema(),
-  password: passwordSchema,
-  role: Yup.mixed<TeamMemberRole>().oneOf([...TEAM_MEMBER_ROLE_VALUES]).required(requiredMessage("Role")),
+  role: Yup.mixed<TeamMemberRole>().oneOf([...TEAM_MEMBER_ROLE_VALUES]).required("Role is required"),
   branch_name: Yup.string().transform((value) => (typeof value === "string" ? value.trim() : value)).optional(),
 });
 
 export const teamMemberInitialValues: TeamMemberFormValues = {
   full_name: "",
   mobile_number: "",
-  password: "",
   role: "collector",
   branch_name: "",
 };
@@ -39,14 +31,12 @@ export const teamMemberInitialValues: TeamMemberFormValues = {
 export type CreateTenantFormValues = {
   full_name: string;
   mobile_number: string;
-  password: string;
   branch_name: string;
 };
 
 export const createTenantValidationSchema = Yup.object({
   full_name: requiredTrimmedString("Owner name", 2, 120),
   mobile_number: mobileSchema(),
-  password: passwordSchema,
   branch_name: Yup.string()
     .transform((v) => (typeof v === "string" ? v.trim() : v))
     .max(120, "Branch name must be at most 120 characters")
@@ -56,7 +46,6 @@ export const createTenantValidationSchema = Yup.object({
 export const createTenantInitialValues: CreateTenantFormValues = {
   full_name: "",
   mobile_number: "",
-  password: "",
   branch_name: "",
 };
 

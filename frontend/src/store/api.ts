@@ -117,6 +117,6 @@ const baseQueryWithReauth: BaseQueryFn<AxiosBaseQueryArgs, unknown, QueryError> 
 export const api = createApi({
   reducerPath: "api",
   baseQuery: baseQueryWithReauth,
-  tagTypes: ["Auth", "Borrower", "Loan", "Collection", "Dashboard", "Report", "Onboarding", "Account", "Team", "Notification"],
+  tagTypes: ["Auth", "Borrower", "Loan", "Collection", "Dashboard", "Report", "Onboarding", "Account", "Team", "Notification", "CustomerLedger", "Note"],
   endpoints: () => ({}),
 });

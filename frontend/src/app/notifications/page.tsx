@@ -14,18 +14,19 @@ import {
 } from "@/features/notifications/notification-api";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { formatDateDMY } from "@/lib/format";
+import { ROUTES } from "@/lib/routes";
 
 function resolveNotificationHref(notification: Notification) {
   if (notification.redirect_target?.startsWith("/")) {
     return notification.redirect_target;
   }
   if (notification.borrower_uuid) {
-    return `/borrowers/${notification.borrower_uuid}`;
+    return ROUTES.app.loans.borrower(notification.borrower_uuid);
   }
   if (notification.loan_uuid) {
-    return `/loans/${notification.loan_uuid}`;
+    return `${ROUTES.app.loans.root}/${notification.loan_uuid}`;
   }
-  return "/dashboard";
+  return ROUTES.app.loans.dashboard;
 }
 
 function NotificationCard({ notification, onOpen }: { notification: Notification; onOpen: (notification: Notification) => void }) {
@@ -101,9 +102,9 @@ export default function NotificationsPage() {
 
   const unreadCount = items.filter((n) => !n.is_read).length;
   const backHref = useMemo(() => {
-    if (role === "borrower") return "/portal";
-    if (role === "super_admin") return "/super-admin/dashboard";
-    return "/dashboard";
+    if (role === "borrower") return ROUTES.app.portal;
+    if (role === "super_admin") return ROUTES.app.superAdmin.dashboard;
+    return ROUTES.app.loans.dashboard;
   }, [role]);
 
   const handleRefresh = async () => {

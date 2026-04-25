@@ -34,13 +34,6 @@ export default function BorrowerListPage() {
   const [draftStatus, setDraftStatus] = useState(status);
   const [page, setPage] = useState(1);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [tempPasswordInfo, setTempPasswordInfo] = useState<{
-    borrowerUuid: string;
-    name: string;
-    mobile: string;
-    password: string;
-  } | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const { data, isFetching } = useListBorrowersQuery({
     search: search || undefined,
@@ -71,32 +64,7 @@ export default function BorrowerListPage() {
   const onCreateBorrower = async (values: BorrowerFormValues) => {
     const borrower = await addBorrower(values).unwrap();
     setShowAddModal(false);
-
-    if (borrower.temporary_password) {
-      setTempPasswordInfo({
-        borrowerUuid: borrower.uuid,
-        name: values.name,
-        mobile: values.mobile_number,
-        password: borrower.temporary_password,
-      });
-    } else {
-      router.push(`/borrowers/${borrower.uuid}`);
-    }
-  };
-
-  const handleCopyPassword = () => {
-    if (!tempPasswordInfo) return;
-    navigator.clipboard.writeText(tempPasswordInfo.password).catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleContinueToBorrower = () => {
-    if (!tempPasswordInfo) return;
-    const next = tempPasswordInfo.borrowerUuid;
-    setTempPasswordInfo(null);
-    setCopied(false);
-    router.push(`/borrowers/${next}`);
+    router.push(`/borrowers/${borrower.uuid}`);
   };
 
   return (
@@ -175,54 +143,9 @@ export default function BorrowerListPage() {
           onSubmit={onCreateBorrower}
           onCancel={() => setShowAddModal(false)}
           submitLabel="Create Borrower"
-          showPasswordField
-          requirePassword
         />
       </Modal>
 
-      <Modal
-        open={Boolean(tempPasswordInfo)}
-        onClose={handleContinueToBorrower}
-        title="Borrower Account Created"
-        size="sm"
-        footer={
-          <Button onClick={handleContinueToBorrower} fullWidth>
-            Continue to Borrower
-          </Button>
-        }
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-muted">
-            A login account has been created for{" "}
-            <span className="font-semibold text-text">{tempPasswordInfo?.name}</span>.
-            Share these credentials with the borrower.
-          </p>
-          <div className="app-panel p-4 space-y-3 bg-surface2">
-            <div>
-              <p className="text-xs text-muted mb-1">Mobile Number</p>
-              <p className="text-sm font-semibold text-text font-mono">{tempPasswordInfo?.mobile}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted mb-1">Temporary Password</p>
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-bold text-text font-mono tracking-widest flex-1">
-                  {tempPasswordInfo?.password}
-                </p>
-                <button
-                  type="button"
-                  onClick={handleCopyPassword}
-                  className="text-xs text-primary-600 hover:underline font-medium flex-shrink-0"
-                >
-                  {copied ? "Copied!" : "Copy"}
-                </button>
-              </div>
-            </div>
-          </div>
-          <p className="text-xs text-danger-600 font-medium">
-            Note: This password will not be shown again. Save it now.
-          </p>
-        </div>
-      </Modal>
     </Screen>
   );
 }

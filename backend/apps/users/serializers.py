@@ -18,6 +18,9 @@ ROLE_PERMISSIONS = {
         "view:loans",
         "add:collection",
         "view:settings",
+        "view:customer-ledger",
+        "view:notes",
+        "view:modules",
         "create:loan",
         "add:borrower",
         "edit:borrower",
@@ -37,6 +40,9 @@ ROLE_PERMISSIONS = {
         "view:loans",
         "add:collection",
         "view:settings",
+        "view:customer-ledger",
+        "view:notes",
+        "view:modules",
     ],
     RoleChoices.BORROWER: [
         "view:portal",
@@ -130,6 +136,22 @@ class ResetPasswordRequiredSerializer(serializers.Serializer):
 class MobileTokenObtainSerializer(TokenObtainPairSerializer):
     username_field = "mobile_number"
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Remove password field — mobile number is the sole identifier
+        self.fields.pop("password", None)
+
+    def validate(self, attrs):
+        mobile_number = attrs.get("mobile_number", "").strip()
+        try:
+            user = User.objects.get(mobile_number=mobile_number, is_active=True)
+        except User.DoesNotExist:
+            raise serializers.ValidationError(
+                {"mobile_number": "No active account found with this mobile number."}
+            )
+        self.user = user
+        return {}
+
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
@@ -139,11 +161,9 @@ class MobileTokenObtainSerializer(TokenObtainPairSerializer):
 
 
 class SignupSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, min_length=8)
-
     class Meta:
         model = User
-        fields = ["id", "full_name", "mobile_number", "password", "role", "branch_name"]
+        fields = ["id", "full_name", "mobile_number", "role", "branch_name"]
         read_only_fields = ["id"]
 
     def validate_role(self, value):
@@ -158,5 +178,8 @@ class SignupSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
-        password = validated_data.pop("password")
-        return User.objects.create_user(password=password, **validated_data)
+        import secrets
+        import string
+        alphabet = string.ascii_letters + string.digits
+        password = "".join(secrets.choice(alphabet) for _ in range(16))
+        return User.objects.create_user(password=password, must_reset_password=True, **validated_data)

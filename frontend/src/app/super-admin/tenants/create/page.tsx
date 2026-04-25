@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import {
   FormErrorBanner,
   MobileNumberInput,
-  PasswordInput,
   TextInput,
   formikFieldState,
 } from "@/components/forms/system";
@@ -26,7 +25,6 @@ import {
 const TENANT_FIELDS: Array<keyof CreateTenantFormValues> = [
   "full_name",
   "mobile_number",
-  "password",
   "branch_name",
 ];
 
@@ -46,7 +44,6 @@ export default function CreateTenantPage() {
         await createMember({
           full_name: payload.full_name,
           mobile_number: payload.mobile_number,
-          password: payload.password,
           role: "admin",
           branch_name: payload.branch_name,
         }).unwrap();
@@ -62,7 +59,6 @@ export default function CreateTenantPage() {
 
   const nameState = formikFieldState(formik, "full_name");
   const mobileState = formikFieldState(formik, "mobile_number");
-  const passwordState = formikFieldState(formik, "password");
   const branchState = formikFieldState(formik, "branch_name");
 
   return (
@@ -78,7 +74,8 @@ export default function CreateTenantPage() {
         <form className="app-panel p-5 space-y-4" onSubmit={formik.handleSubmit} noValidate>
           <p className="text-sm text-muted">
             Creating a Tenant Admin account gives them full access to manage their own borrowers,
-            collectors, loans, and collections.
+            collectors, loans, and collections. A temporary password will be auto-generated and they
+            will be asked to reset it on first login.
           </p>
 
           <FormErrorBanner message={(formik.status as { formError?: string } | undefined)?.formError} />
@@ -107,20 +104,6 @@ export default function CreateTenantPage() {
             placeholder="10-digit mobile"
             required
             data-testid="tenant-mobile"
-          />
-
-          <PasswordInput
-            label="Password"
-            name="password"
-            value={formik.values.password}
-            onChange={formik.handleChange}
-            onBlur={formik.handleBlur}
-            touched={passwordState.touched}
-            error={passwordState.error}
-            placeholder="Set password"
-            helperText="Minimum 8 characters"
-            required
-            data-testid="tenant-password"
           />
 
           <TextInput

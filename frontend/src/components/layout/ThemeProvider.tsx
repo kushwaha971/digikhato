@@ -23,10 +23,10 @@ function applyTheme(theme: ThemePreference) {
 }
 
 export function ThemeProvider({ children }: PropsWithChildren) {
-  const [theme, setThemeState] = useState<ThemePreference>("system");
+  const [theme, setThemeState] = useState<ThemePreference>("light");
 
   useEffect(() => {
-    const saved = (localStorage.getItem("themePreference") as ThemePreference | null) ?? "system";
+    const saved = (localStorage.getItem("themePreference") as ThemePreference | null) ?? "light";
     setThemeState(saved);
     applyTheme(saved);
   }, []);

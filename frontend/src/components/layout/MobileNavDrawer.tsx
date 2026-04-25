@@ -4,14 +4,20 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
+import { BrandLogo } from "@/components/branding/BrandLogo";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useLogoutMutation } from "@/features/auth/auth-api";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { getModuleContext, MODULE_META } from "@/lib/moduleNav";
+import { ROUTES } from "@/lib/routes";
 import { clearAuth } from "@/store/auth-slice";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
   BORROWER_NAV,
+  LEDGER_MODULE_NAV,
   MAIN_NAV,
+  NOTES_MODULE_NAV,
+  LOAN_MODULE_NAV,
   SETTINGS_NAV,
   SUPER_ADMIN_NAV,
 } from "@/components/layout/Sidebar";
@@ -29,6 +35,8 @@ export function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps) {
   const { can, isSuperAdmin, isBorrower } = useRoleAccess();
   const currentUser = useAppSelector((state) => state.auth.currentUser);
   const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
+  const moduleCtx = getModuleContext(pathname);
+  const showModuleContext = Boolean(moduleCtx) && !isSuperAdmin && !isBorrower;
 
   const [mounted, setMounted] = useState(false);
   const [visible, setVisible] = useState(false);
@@ -51,9 +59,21 @@ export function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps) {
   if (isSuperAdmin) primaryNav = SUPER_ADMIN_NAV;
   else if (isBorrower) primaryNav = BORROWER_NAV;
   const visibleItems = primaryNav.filter((item) => can(item.permission));
+  const moduleItems = (() => {
+    if (!showModuleContext) return [];
+    if (moduleCtx === "loans") return LOAN_MODULE_NAV.filter((item) => can(item.permission));
+    if (moduleCtx === "ledger") return LEDGER_MODULE_NAV.filter((item) => can(item.permission));
+    if (moduleCtx === "notes") return NOTES_MODULE_NAV.filter((item) => can(item.permission));
+    return [];
+  })();
 
   const isActive = (href: string) =>
-    pathname === href || (href !== "/" && pathname.startsWith(href));
+    pathname === href || (href !== "/" && pathname.startsWith(href + "/"));
+  const homeHref = isSuperAdmin
+    ? ROUTES.app.superAdmin.dashboard
+    : isBorrower
+      ? ROUTES.app.portal
+      : ROUTES.app.loans.dashboard;
 
   const handleLogout = async () => {
     try {
@@ -64,7 +84,7 @@ export function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps) {
         localStorage.removeItem("accessToken");
       }
       onClose();
-      router.push("/login");
+      router.push(ROUTES.public.login);
     }
   };
 
@@ -72,9 +92,17 @@ export function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps) {
 
   const transition = "transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]";
 
+  const navLinkClass = (active: boolean) =>
+    [
+      "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150",
+      active
+        ? "bg-[var(--sidebar-active-bg)] text-[var(--sidebar-active-text)] font-semibold"
+        : "text-[var(--sidebar-text)] hover:bg-[var(--sidebar-active-bg)] hover:text-[var(--sidebar-active-text)]",
+    ].join(" ");
+
   return (
     <div className="fixed inset-0 z-50 lg:hidden">
-      {/* Backdrop — fades in */}
+      {/* Backdrop */}
       <div
         className={`absolute inset-0 bg-black/45 backdrop-blur-sm transition-opacity duration-300 ${
           visible ? "opacity-100" : "opacity-0"
@@ -83,7 +111,7 @@ export function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps) {
         aria-hidden="true"
       />
 
-      {/* Left-side drawer — slides in from left */}
+      {/* Left-side drawer */}
       <aside
         className={`
           absolute left-0 top-0 h-full w-[86%] max-w-sm
@@ -94,7 +122,7 @@ export function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps) {
         `}
       >
         <div className="h-16 px-4 border-b border-border flex items-center justify-between flex-shrink-0">
-          <p className="text-lg font-bold text-text">Digikhaato</p>
+          <BrandLogo size="sm" href={homeHref} />
           <button
             type="button"
             onClick={onClose}
@@ -108,19 +136,39 @@ export function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps) {
         </div>
 
         <nav className="flex-1 overflow-y-auto p-3 space-y-1">
+          {/* Module items FIRST */}
+          {showModuleContext && moduleItems.length > 0 ? (
+            <>
+              <p className="px-3 pt-1 pb-0.5 text-[10px] font-bold uppercase tracking-widest text-muted">
+                {MODULE_META[moduleCtx!].label}
+              </p>
+              {moduleItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={onClose}
+                  className={navLinkClass(isActive(item.href))}
+                >
+                  <span className="text-primary-500">{item.icon}</span>
+                  <span className="text-sm">{item.label}</span>
+                </Link>
+              ))}
+              <div className="my-2 border-t border-border" />
+            </>
+          ) : null}
+
+          {/* Apps BELOW */}
+          <p className="px-3 pt-1 pb-0.5 text-[10px] font-bold uppercase tracking-widest text-muted">
+            Apps
+          </p>
           {visibleItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
               onClick={onClose}
-              className={[
-                "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150",
-                isActive(item.href)
-                  ? "bg-[var(--sidebar-active-bg)] text-[var(--sidebar-active-text)] font-semibold"
-                  : "text-[var(--sidebar-text)] hover:bg-[var(--sidebar-active-bg)] hover:text-[var(--sidebar-active-text)]",
-              ].join(" ")}
+              className={navLinkClass(isActive(item.href))}
             >
-              <span className="text-[var(--sidebar-icon)]">{item.icon}</span>
+              <span className="text-primary-500">{item.icon}</span>
               <span className="text-sm">{item.label}</span>
             </Link>
           ))}
@@ -129,14 +177,9 @@ export function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps) {
             <Link
               href={SETTINGS_NAV.href}
               onClick={onClose}
-              className={[
-                "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150",
-                isActive(SETTINGS_NAV.href)
-                  ? "bg-[var(--sidebar-active-bg)] text-[var(--sidebar-active-text)] font-semibold"
-                  : "text-[var(--sidebar-text)] hover:bg-[var(--sidebar-active-bg)] hover:text-[var(--sidebar-active-text)]",
-              ].join(" ")}
+              className={navLinkClass(isActive(SETTINGS_NAV.href))}
             >
-              <span className="text-[var(--sidebar-icon)]">{SETTINGS_NAV.icon}</span>
+              <span className="text-primary-500">{SETTINGS_NAV.icon}</span>
               <span className="text-sm">{SETTINGS_NAV.label}</span>
             </Link>
           ) : null}

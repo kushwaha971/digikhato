@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useFormik } from "formik";
 import * as Yup from "yup";
+import { useRouter } from "next/navigation";
 
 import { Screen } from "@/components/layout/Screen";
 import { Button } from "@/components/ui/Button";
@@ -23,6 +24,7 @@ import {
   useToggleTeamMemberStatusMutation,
   useUpdateTeamMemberMutation,
 } from "@/features/team/team-api";
+import { ROUTES } from "@/lib/routes";
 import { requiredTrimmedString } from "@/validation/common";
 import type { AuthUser } from "@/store/auth-slice";
 
@@ -37,6 +39,7 @@ const editSchema = Yup.object({
 });
 
 export default function TenantsPage() {
+  const router = useRouter();
   const { data: allMembers, isLoading } = useGetTeamMembersQuery();
   const [toggleStatus, { isLoading: isToggling }] = useToggleTeamMemberStatusMutation();
   const [updateMember, { isLoading: isUpdating }] = useUpdateTeamMemberMutation();
@@ -104,7 +107,7 @@ export default function TenantsPage() {
     <Screen
       title="Tenant Admins"
       actions={
-        <Link href="/super-admin/tenants/create">
+        <Link href={`${ROUTES.app.superAdmin.tenants}/create`}>
           <Button size="sm" fullWidth={false}>+ New Tenant</Button>
         </Link>
       }
@@ -122,7 +125,7 @@ export default function TenantsPage() {
           <EmptyState
             title="No tenant admins found"
             description="Create a new tenant to get started."
-            action={{ label: "New Tenant", onClick: () => globalThis.location.assign("/super-admin/tenants/create") }}
+            action={{ label: "New Tenant", onClick: () => router.push(`${ROUTES.app.superAdmin.tenants}/create`) }}
           />
         )}
 

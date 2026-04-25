@@ -2,18 +2,19 @@
 
 import { useFormik } from "formik";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { BrandLogo } from "@/components/branding/BrandLogo";
 import {
   FormErrorBanner,
   MobileNumberInput,
-  PasswordInput,
   formikFieldState,
 } from "@/components/forms/system";
 import { Button } from "@/components/ui/Button";
 import { useLoginMutation } from "@/features/auth/auth-api";
 import { setAuth } from "@/store/auth-slice";
 import { useAppDispatch } from "@/store/hooks";
+import { ROUTES } from "@/lib/routes";
 import {
   focusFirstInvalidField,
   loginInitialValues,
@@ -26,20 +27,21 @@ import {
 function getPostLoginRedirect(role: string | undefined): string {
   switch (role) {
     case "super_admin":
-      return "/super-admin/dashboard";
+      return ROUTES.app.superAdmin.dashboard;
     case "borrower":
-      return "/portal";
+      return ROUTES.app.portal;
     case "admin":
     case "collector":
     default:
-      return "/dashboard";
+      return ROUTES.app.udhaarbook.root;
   }
 }
 
-const LOGIN_FIELDS: Array<keyof LoginFormValues> = ["mobile_number", "password"];
+const LOGIN_FIELDS: Array<keyof LoginFormValues> = ["mobile_number"];
 
 export default function LoginPage() {
   const dispatch = useAppDispatch();
+  const router = useRouter();
   const [login, { isLoading }] = useLoginMutation();
 
   const formik = useFormik<LoginFormValues>({
@@ -54,7 +56,7 @@ export default function LoginPage() {
         const result = await login(normalized).unwrap();
         dispatch(setAuth({ access: result.access, user: result.user }));
         localStorage.setItem("accessToken", result.access);
-        globalThis.location.href = getPostLoginRedirect(result.user?.role);
+        router.replace(getPostLoginRedirect(result.user?.role));
       } catch (error) {
         const parsed = mapBackendErrorsToFormik(error, helpers, LOGIN_FIELDS);
         focusFirstInvalidField(Object.keys(parsed.fieldErrors));
@@ -65,7 +67,6 @@ export default function LoginPage() {
   });
 
   const mobileState = formikFieldState(formik, "mobile_number");
-  const passwordState = formikFieldState(formik, "password");
 
   return (
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 flex items-center justify-center p-4">
@@ -75,7 +76,7 @@ export default function LoginPage() {
             <BrandLogo size="lg" href="/" />
           </div>
           <h1 className="text-2xl font-bold text-text">Welcome back</h1>
-          <p className="text-muted text-sm mt-1">Sign in to your DailyBook account</p>
+          <p className="text-muted text-sm mt-1">Sign in to your DigiKhaato account</p>
         </div>
 
         <div className="app-panel p-6 space-y-4">
@@ -96,20 +97,6 @@ export default function LoginPage() {
               data-testid="login-mobile-number"
             />
 
-            <PasswordInput
-              label="Password"
-              name="password"
-              autoComplete="current-password"
-              value={formik.values.password}
-              onChange={formik.handleChange}
-              onBlur={formik.handleBlur}
-              touched={passwordState.touched}
-              error={passwordState.error}
-              placeholder="Enter your password"
-              required
-              data-testid="login-password"
-            />
-
             <div className="pt-1">
               <Button
                 loading={formik.isSubmitting || isLoading}
@@ -126,7 +113,7 @@ export default function LoginPage() {
 
         <p className="text-center text-sm text-muted mt-4">
           Don&apos;t have an account?{" "}
-          <Link href="/signup" className="text-primary-500 font-medium hover:underline">
+          <Link href={ROUTES.public.signup} className="text-primary-500 font-medium hover:underline">
             Sign up
           </Link>
         </p>

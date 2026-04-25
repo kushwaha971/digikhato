@@ -12,6 +12,7 @@ import {
 } from "@/components/forms/system";
 import { Button } from "@/components/ui/Button";
 import { useChangePasswordMutation, useGetMeQuery } from "@/features/auth/auth-api";
+import { ROUTES } from "@/lib/routes";
 import { setCurrentUser } from "@/store/auth-slice";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
@@ -27,11 +28,11 @@ const PASSWORD_FIELDS: Array<keyof ChangePasswordFormValues> = ["old_password", 
 function getPostResetRedirect(role: string | undefined): string {
   switch (role) {
     case "super_admin":
-      return "/super-admin/dashboard";
+      return ROUTES.app.superAdmin.dashboard;
     case "borrower":
-      return "/portal";
+      return ROUTES.app.portal;
     default:
-      return "/dashboard";
+      return ROUTES.app.udhaarbook.root;
   }
 }
 
@@ -56,7 +57,7 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     if (!accessToken) {
-      router.replace("/login");
+      router.replace(ROUTES.public.login);
       return;
     }
 
@@ -82,7 +83,7 @@ export default function ResetPasswordPage() {
           dispatch(setCurrentUser({ ...effectiveUser, must_reset_password: false }));
           router.replace(getPostResetRedirect(effectiveUser.role));
         } else {
-          router.replace("/dashboard");
+          router.replace(ROUTES.app.udhaarbook.root);
         }
       } catch (error) {
         const parsed = mapBackendErrorsToFormik(error, helpers, PASSWORD_FIELDS);

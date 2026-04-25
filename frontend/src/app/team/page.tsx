@@ -7,7 +7,6 @@ import { TEAM_MEMBER_ROLE_OPTIONS, type TeamMemberRole } from "@/constants/form-
 import {
   FormErrorBanner,
   MobileNumberInput,
-  PasswordInput,
   SelectInput,
   TextInput,
   formikFieldState,
@@ -42,7 +41,7 @@ const ROLE_VARIANT: Record<TeamMemberRole, "primary" | "success" | "neutral"> = 
   borrower: "neutral",
 };
 
-const TEAM_FIELDS: Array<keyof TeamMemberFormValues> = ["full_name", "mobile_number", "password", "role", "branch_name"];
+const TEAM_FIELDS: Array<keyof TeamMemberFormValues> = ["full_name", "mobile_number", "role", "branch_name"];
 
 export default function TeamPage() {
   const { data: team, isLoading } = useGetTeamMembersQuery();
@@ -66,7 +65,6 @@ export default function TeamPage() {
         await createMember({
           full_name: payload.full_name,
           mobile_number: payload.mobile_number,
-          password: payload.password,
           role: payload.role,
           branch_name: payload.branch_name,
         }).unwrap();
@@ -99,7 +97,6 @@ export default function TeamPage() {
 
   const nameState = formikFieldState(formik, "full_name");
   const mobileState = formikFieldState(formik, "mobile_number");
-  const passwordState = formikFieldState(formik, "password");
   const roleState = formikFieldState(formik, "role");
 
   return (
@@ -212,19 +209,6 @@ export default function TeamPage() {
             touched={mobileState.touched}
             error={mobileState.error}
             placeholder="10-digit mobile"
-            required
-          />
-
-          <PasswordInput
-            label="Password"
-            name="password"
-            value={formik.values.password}
-            onChange={formik.handleChange}
-            onBlur={formik.handleBlur}
-            touched={passwordState.touched}
-            error={passwordState.error}
-            placeholder="Set password"
-            helperText="Minimum 8 characters"
             required
           />
 
