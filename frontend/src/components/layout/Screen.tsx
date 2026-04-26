@@ -28,7 +28,7 @@ export function Screen({ title, breadcrumb, actions, children, noPadding = false
       {(title || breadcrumb || actions) && (
         <div className="sticky top-16 z-20 bg-canvas/90 backdrop-blur-md border-b border-border flex-shrink-0">
           <div className={containerClass}>
-            <div className="py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="py-3 flex flex-row items-center justify-between gap-3">
               <div className="min-w-0 flex items-center gap-2 flex-1">
                 {backHref && (
                   <PageBackButton fallbackHref={backHref} />
@@ -60,7 +60,7 @@ export function Screen({ title, breadcrumb, actions, children, noPadding = false
                 </div>
               </div>
               {actions && (
-                <div className="flex items-center gap-2 flex-shrink-0 self-end sm:self-auto">{actions}</div>
+                <div className="flex items-center gap-2 flex-shrink-0">{actions}</div>
               )}
             </div>
           </div>

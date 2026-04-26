@@ -6,6 +6,7 @@ from apps.accounts.views import AccountViewSet
 from apps.customer_ledger.views import LedgerCustomerViewSet
 from apps.notes.views import NoteViewSet
 from apps.borrowers.views import BorrowerViewSet
+from apps.locations.views import LocationViewSet
 from apps.collections.views import CollectionViewSet, DailyCollectionViewSet, TodayDueListView
 from apps.dashboard.views import DashboardSummaryView
 from apps.loans.views import LoanViewSet, OverdueLoanListView
@@ -57,6 +58,7 @@ router.register("accounts", GuardedAccountViewSet, basename="account")
 router.register("daily-collections", GuardedDailyCollectionViewSet, basename="daily-collection")
 router.register("ledger/customers", LedgerCustomerViewSet, basename="ledger-customer")
 router.register("notes", NoteViewSet, basename="note")
+router.register("locations", LocationViewSet, basename="location")
 
 urlpatterns = [
     path("admin/", admin.site.urls),

@@ -21,6 +21,7 @@ import type { Collection } from "@/features/collections/collection-api";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { formatDateDMY } from "@/lib/format";
 import { PAYMENT_MODE_OPTIONS } from "@/validation";
+import { ROUTES } from "@/lib/routes";
 
 type Tab = "today" | "history";
 
@@ -47,6 +48,7 @@ export default function CollectionsPage() {
   const { data: todayData, isLoading: todayLoading } = useListTodayDueQuery();
   const { data: historyData, isFetching: historyFetching } = useListCollectionsQuery(
     {
+      search: search || undefined,
       payment_mode: paymentMode || undefined,
       date__gte: dateFrom || undefined,
       date__lte: dateTo || undefined,
@@ -74,14 +76,6 @@ export default function CollectionsPage() {
       loan.borrower_name.toLowerCase().includes(q),
     );
   }, [todayData?.results, search]);
-
-  const filteredHistory = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return historyItems;
-    return historyItems.filter((r) =>
-      String(r.borrower).includes(q) || String(r.loan).includes(q),
-    );
-  }, [historyItems, search]);
 
   const hasActiveFilters = Boolean(paymentMode || dateFrom || dateTo || minAmt || maxAmt || collectorId);
 
@@ -145,19 +139,6 @@ export default function CollectionsPage() {
         ) : undefined
       }
     >
-      {canCollect ? (
-        <div className="app-panel p-3 mb-4">
-          <p className="text-sm text-text font-semibold">Context-first collection flow</p>
-          <p className="text-xs text-muted mt-1">
-            Record collections from <strong>Today Due</strong> list or from a borrower/loan page.
-          </p>
-          <div className="flex items-center gap-2 mt-2">
-            <Link href="/collections/today" className="text-xs font-semibold text-primary-500 hover:text-primary-600">Open Today Due →</Link>
-            <Link href="/borrowers" className="text-xs font-semibold text-primary-500 hover:text-primary-600">Open Borrowers →</Link>
-          </div>
-        </div>
-      ) : null}
-
       {/* Tabs */}
       <div className="flex gap-1 mb-4 p-1 bg-surface2 rounded-xl w-fit">
         {(["today", "history"] as Tab[]).map((tab) => (
@@ -176,8 +157,8 @@ export default function CollectionsPage() {
       <div className="mb-3">
         <StickyGlobalSearchBar
           value={search}
-          onChange={setSearch}
-          placeholder={activeTab === "today" ? "Search borrower…" : "Search by borrower or loan ID…"}
+          onChange={(v) => { setSearch(v); setPage(1); }}
+          placeholder={activeTab === "today" ? "Search borrower…" : "Search borrower, collection code…"}
         />
       </div>
 
@@ -203,21 +184,18 @@ export default function CollectionsPage() {
       {activeTab === "history" && (
         <>
           {historyFetching && page === 1 && <SkeletonList count={4} />}
-          {!historyFetching && filteredHistory.length === 0 && (
+          {!historyFetching && historyItems.length === 0 && (
             <EmptyState title="No collection history" description="No entries match your current filters." />
           )}
-          {filteredHistory.length > 0 && (
+          {historyItems.length > 0 && (
             <div className="space-y-3">
-              {filteredHistory.map((row) => (
+              {historyItems.map((row) => (
                 <CollectionCard key={row.id} row={row} canCollect={canCollect} />
               ))}
             </div>
           )}
 
-          {/* Infinite scroll sentinel */}
-          {hasMore && (
-            <div ref={sentinelRef} className="h-1 mt-2" />
-          )}
+          {hasMore && <div ref={sentinelRef} className="h-1 mt-2" />}
           {historyFetching && page > 1 && (
             <div className="py-4 flex justify-center">
               <div className="w-5 h-5 rounded-full border-2 border-primary-500 border-t-transparent animate-spin" />
@@ -232,35 +210,47 @@ export default function CollectionsPage() {
 function CollectionCard({ row, canCollect }: { row: Collection; canCollect: boolean }) {
   return (
     <div className="app-panel p-4">
-      {/* Top row: collection ID + edit link */}
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-semibold text-muted uppercase tracking-wide">
-          {row.collection_code ?? `CL-${row.id}`}
-        </span>
-        {canCollect && (
-          <Link
-            href={`/collections/${row.uuid}/edit`}
-            className="text-xs font-semibold text-primary-600 hover:underline"
-          >
-            Edit
-          </Link>
-        )}
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-9 h-9 rounded-full bg-gradient-primary flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+            {row.borrower_name ? row.borrower_name.charAt(0).toUpperCase() : "?"}
+          </div>
+          <div className="min-w-0">
+            <p className="font-semibold text-text text-sm truncate">
+              {row.borrower_name ?? `Borrower #${row.borrower}`}
+            </p>
+            {row.borrower_mobile && (
+              <p className="text-xs text-muted truncate">{row.borrower_mobile}</p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {canCollect && (
+            <Link
+              href={ROUTES.app.loans.collectionEdit(row.uuid)}
+              className="text-xs font-semibold text-primary-600 hover:underline"
+            >
+              Edit
+            </Link>
+          )}
+        </div>
       </div>
 
-      {/* Amount — prominent */}
-      <p className="text-xl font-bold text-text mb-2">
-        ₹{Number(row.amount_paid).toLocaleString("en-IN")}
-      </p>
-
-      {/* Date + payment mode chip */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-sm font-semibold text-primary-600">
-          {formatDateDMY(row.date)}
-        </span>
-        {row.payment_mode && <PaymentModeChip mode={row.payment_mode} />}
+      <div className="flex items-center justify-between gap-2 mt-2">
+        <p className="text-lg font-bold text-text">
+          ₹{Number(row.amount_paid).toLocaleString("en-IN")}
+        </p>
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <span className="text-sm text-muted">{formatDateDMY(row.date)}</span>
+          {row.payment_mode && <PaymentModeChip mode={row.payment_mode} />}
+        </div>
       </div>
 
-      {row.notes && <p className="text-xs text-muted mt-2">{row.notes}</p>}
+      <div className="flex items-center justify-between gap-2 mt-1">
+        <span className="text-xs text-muted">{row.collection_code ?? `CL-${row.id}`}</span>
+      </div>
+
+      {row.notes && <p className="text-xs text-muted mt-2 border-t border-border pt-2">{row.notes}</p>}
     </div>
   );
 }

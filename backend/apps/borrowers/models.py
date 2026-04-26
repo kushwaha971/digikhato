@@ -8,6 +8,13 @@ from apps.common.models import TimeStampedModel
 
 
 class Borrower(TimeStampedModel):
+    location = models.ForeignKey(
+        "locations.Location",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="location_borrowers",
+    )
     uuid = models.UUIDField(default=_uuid.uuid4, unique=True, editable=False, db_index=True)
     name = models.CharField(max_length=120)
     mobile_number = models.CharField(max_length=15, db_index=True)

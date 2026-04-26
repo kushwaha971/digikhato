@@ -8,6 +8,8 @@ const LOAN_PREFIXES = [
   ROUTES.app.loans.collections,
   ROUTES.app.loans.reports,
   ROUTES.app.loans.overdue,
+  ROUTES.app.loans.locations,
+  ROUTES.app.team,
 ];
 
 export function getModuleContext(pathname: string): ModuleContext {
@@ -40,6 +42,8 @@ export const MODULE_META: Record<
       { href: ROUTES.app.loans.borrowers, label: "Borrowers" },
       { href: ROUTES.app.loans.collections, label: "Collections" },
       { href: ROUTES.app.loans.reports, label: "Reports" },
+      { href: ROUTES.app.loans.locations, label: "Locations" },
+      { href: ROUTES.app.team, label: "Team" },
     ],
   },
   ledger: {

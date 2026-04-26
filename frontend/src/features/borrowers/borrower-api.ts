@@ -10,11 +10,13 @@ export interface Borrower {
   status: "active" | "inactive";
   has_alert?: boolean;
   must_reset_password?: boolean;
+  location?: number | null;
+  location_name?: string | null;
 }
 
 export const borrowerApi = api.injectEndpoints({
   endpoints: (builder) => ({
-    listBorrowers: builder.query<PaginatedResponse<Borrower>, { search?: string; status?: string; ordering?: string; page?: number }>({
+    listBorrowers: builder.query<PaginatedResponse<Borrower>, { search?: string; status?: string; ordering?: string; page?: number; location?: number }>({
       query: (params) => ({ url: "borrowers/", params }),
       providesTags: ["Borrower"],
     }),

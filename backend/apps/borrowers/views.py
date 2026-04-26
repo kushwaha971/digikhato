@@ -17,7 +17,7 @@ class BorrowerViewSet(viewsets.ModelViewSet):
     serializer_class = BorrowerSerializer
     permission_classes = [IsAdminOrCollector]
     search_fields = ["name", "mobile_number", "guarantor_name"]
-    filterset_fields = ["status", "assigned_agent"]
+    filterset_fields = ["status", "assigned_agent", "location"]
     ordering_fields = ["updated_at", "name", "created_at"]
 
     def get_queryset(self):

@@ -9,6 +9,7 @@ import {
   TextInput,
   formikFieldState,
 } from "@/components/forms/system";
+import { LocationSearchDropdown } from "@/components/forms/LocationSearchDropdown";
 import { Button } from "@/components/ui/Button";
 import {
   borrowerInitialValues,
@@ -27,7 +28,7 @@ type BorrowerFormProps = Readonly<{
   submitLabel?: string;
 }>;
 
-const BORROWER_FIELDS: Array<keyof BorrowerFormValues> = ["name", "mobile_number", "address", "assigned_agent"];
+const BORROWER_FIELDS: Array<keyof BorrowerFormValues> = ["name", "mobile_number", "address", "assigned_agent", "location"];
 
 export function BorrowerForm({
   onSubmit,
@@ -104,6 +105,15 @@ export function BorrowerForm({
         error={addressState.error}
         placeholder="Borrower's address (optional)"
         data-testid="borrower-address"
+      />
+
+      <LocationSearchDropdown
+        label="Location"
+        value={formik.values.location ?? null}
+        onChange={(id) => formik.setFieldValue("location", id)}
+        onBlur={() => formik.setFieldTouched("location", true)}
+        touched={formik.touched.location}
+        error={formik.errors.location}
       />
 
       <div className="flex gap-3 pt-2">

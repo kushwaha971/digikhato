@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     "apps.notifications",
     "apps.customer_ledger",
     "apps.notes",
+    "apps.locations",
 ]
 
 MIDDLEWARE = [

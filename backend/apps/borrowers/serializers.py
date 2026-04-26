@@ -12,6 +12,7 @@ class BorrowerSerializer(serializers.ModelSerializer):
     accounts_count = serializers.SerializerMethodField()
     must_reset_password = serializers.SerializerMethodField(read_only=True)
     has_alert = serializers.BooleanField(read_only=True, default=False)
+    location_name = serializers.CharField(source="location.name", read_only=True, default=None)
 
     class Meta:
         model = Borrower
@@ -28,6 +29,8 @@ class BorrowerSerializer(serializers.ModelSerializer):
             "guarantor_mobile",
             "assigned_agent",
             "user",
+            "location",
+            "location_name",
             "status",
             "accounts_count",
             "has_alert",

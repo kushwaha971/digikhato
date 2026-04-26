@@ -8,6 +8,9 @@ from apps.loans.alerts import derive_payment_status
 
 class CollectionSerializer(serializers.ModelSerializer):
     payment_status = serializers.SerializerMethodField()
+    borrower_name = serializers.CharField(source="borrower.name", read_only=True, default=None)
+    borrower_uuid = serializers.UUIDField(source="borrower.uuid", read_only=True, default=None)
+    borrower_mobile = serializers.CharField(source="borrower.mobile_number", read_only=True, default=None)
 
     class Meta:
         model = Collection
@@ -17,6 +20,9 @@ class CollectionSerializer(serializers.ModelSerializer):
             "collection_code",
             "loan",
             "borrower",
+            "borrower_name",
+            "borrower_uuid",
+            "borrower_mobile",
             "date",
             "amount_paid",
             "status",

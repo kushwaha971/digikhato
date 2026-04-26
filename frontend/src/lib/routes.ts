@@ -11,6 +11,7 @@ export const ROUTES = {
     settings: "/settings",
     notifications: "/notifications",
     portal: "/portal",
+    team: "/team",
     udhaarbook: {
       root: "/udhaarbook",
       party: (id: string | number) => `/udhaarbook/${id}`,
@@ -34,6 +35,10 @@ export const ROUTES = {
       collectionsEntry: "/loans/collections/entry",
       reports: "/loans/reports",
       overdue: "/loans/overdue",
+      locations: "/loans/locations",
+      addLocation: "/loans/locations/add",
+      location: (id: string | number) => `/loans/locations/${id}`,
+      locationEdit: (id: string | number) => `/loans/locations/${id}/edit`,
     },
     superAdmin: {
       dashboard: "/super-admin/dashboard",

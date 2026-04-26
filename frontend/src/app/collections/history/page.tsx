@@ -1,109 +1,144 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 
 import { Screen } from "@/components/layout/Screen";
 import { StickyGlobalSearchBar } from "@/components/business/StickyGlobalSearchBar";
-import { Badge } from "@/components/ui/Badge";
+import { PaymentModeChip } from "@/components/ui/PaymentModeChip";
+import { SkeletonList } from "@/components/ui/Skeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
 import {
-  FILTER_FIELD_CLASS,
-  FILTER_LABEL_CLASS,
+  FilterSelect,
   ResponsiveFilterPanel,
 } from "@/components/ui/ResponsiveFilterPanel";
-import { useListCollectionsQuery } from "@/features/collections/collection-api";
+import { useInfiniteItems } from "@/hooks/useInfiniteItems";
+import { useListCollectionsQuery, type Collection } from "@/features/collections/collection-api";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { formatDateDMY } from "@/lib/format";
-
-const STATUS_OPTIONS = [
-  { label: "All", value: "" },
-  { label: "Paid", value: "paid" },
-  { label: "Partial", value: "partial" },
-  { label: "Missed", value: "missed" },
-];
-
-const STATUS_VARIANT: Record<string, "success" | "warning" | "danger" | "neutral"> = {
-  paid: "success",
-  partial: "warning",
-  missed: "danger",
-};
+import { PAYMENT_MODE_OPTIONS } from "@/validation";
+import { ROUTES } from "@/lib/routes";
 
 export default function CollectionHistoryPage() {
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
-  const [draftStatus, setDraftStatus] = useState(status);
-  const { data, isLoading } = useListCollectionsQuery({});
+  const { isAdmin, isCollector } = useRoleAccess();
+  const canCollect = isAdmin || isCollector;
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return (data?.results ?? []).filter((row) => {
-      const matchesSearch =
-        !q || String(row.borrower).includes(q) || String(row.loan).includes(q);
-      const matchesStatus = !status || row.status === status;
-      return matchesSearch && matchesStatus;
-    });
-  }, [data?.results, search, status]);
+  const [search, setSearch] = useState("");
+  const [paymentMode, setPaymentMode] = useState("");
+  const [draftPaymentMode, setDraftPaymentMode] = useState("");
+  const [page, setPage] = useState(1);
+
+  const { data, isFetching } = useListCollectionsQuery({
+    search: search || undefined,
+    payment_mode: paymentMode || undefined,
+    ordering: "-date,-updated_at",
+    page,
+  });
+
+  const loadMore = useCallback(() => setPage((p) => p + 1), []);
+  const { items, hasMore, sentinelRef } = useInfiniteItems<Collection>(data, isFetching, page, loadMore);
 
   function applyFilters() {
-    setStatus(draftStatus);
+    setPaymentMode(draftPaymentMode);
+    setPage(1);
   }
 
   function resetFilters() {
-    setStatus("");
-    setDraftStatus("");
+    setPaymentMode("");
+    setDraftPaymentMode("");
+    setPage(1);
   }
 
   return (
     <Screen
       title="Collection History"
-      backHref="/collections"
+      backHref={ROUTES.app.loans.collections}
       actions={
         <ResponsiveFilterPanel
           title="Filter History"
-          hasActiveFilters={Boolean(status)}
+          hasActiveFilters={Boolean(paymentMode)}
           onApply={applyFilters}
           onReset={resetFilters}
         >
-          <div className="grid grid-cols-1 gap-2">
-            <label className={FILTER_LABEL_CLASS}>Status</label>
-            <select
-              value={draftStatus}
-              onChange={(event) => setDraftStatus(event.target.value)}
-              className={FILTER_FIELD_CLASS}
-            >
-              {STATUS_OPTIONS.map((option) => (
-                <option key={option.value || "all"} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <FilterSelect
+            label="Payment Mode"
+            value={draftPaymentMode}
+            onChange={(e) => setDraftPaymentMode(e.target.value)}
+          >
+            <option value="">All</option>
+            {PAYMENT_MODE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </FilterSelect>
         </ResponsiveFilterPanel>
       }
     >
-      <StickyGlobalSearchBar value={search} onChange={setSearch} placeholder="Search by borrower ID or loan ID" />
-      {status ? <p className="mt-3 text-xs text-muted">Filters applied</p> : null}
-      {isLoading ? <p>Loading...</p> : null}
-      <div className="space-y-2 mt-3">
-        {filtered.map((row) => (
-          <div key={row.id} className="app-panel p-4">
-            <div className="flex items-center justify-between gap-3">
-              <p className="font-semibold text-text">
-                {row.collection_code ?? `CL-${row.id}`} · Loan ID {row.loan}
-              </p>
-              <Badge variant={STATUS_VARIANT[row.status] ?? "neutral"} className="capitalize">
-                {row.status}
-              </Badge>
-            </div>
-            <p className="text-sm text-muted mt-1">
-              {formatDateDMY(row.date)} · ₹{Number(row.amount_paid).toLocaleString("en-IN")}
-            </p>
-            <p className="text-sm text-muted">{row.notes || "No note"}</p>
-            <Link href={`/collections/${row.uuid}/edit`} className="mt-2 inline-block rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white">
-              Correct Entry
-            </Link>
-          </div>
-        ))}
+      <div className="mb-3">
+        <StickyGlobalSearchBar
+          value={search}
+          onChange={(v) => { setSearch(v); setPage(1); }}
+          placeholder="Search borrower, collection code…"
+        />
       </div>
+
+      {isFetching && page === 1 && <SkeletonList count={4} />}
+
+      {!isFetching && items.length === 0 && (
+        <EmptyState title="No collection history" description="No entries match your current filters." />
+      )}
+
+      {items.length > 0 && (
+        <div className="space-y-3">
+          {items.map((row) => (
+            <div key={row.id} className="app-panel p-4">
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-9 h-9 rounded-full bg-gradient-primary flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                    {row.borrower_name ? row.borrower_name.charAt(0).toUpperCase() : "?"}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-text text-sm truncate">
+                      {row.borrower_name ?? `Borrower #${row.borrower}`}
+                    </p>
+                    {row.borrower_mobile && (
+                      <p className="text-xs text-muted truncate">{row.borrower_mobile}</p>
+                    )}
+                  </div>
+                </div>
+                {canCollect && (
+                  <Link
+                    href={ROUTES.app.loans.collectionEdit(row.uuid)}
+                    className="text-xs font-semibold text-primary-600 hover:underline flex-shrink-0"
+                  >
+                    Edit
+                  </Link>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between gap-2 mt-2">
+                <p className="text-lg font-bold text-text">
+                  ₹{Number(row.amount_paid).toLocaleString("en-IN")}
+                </p>
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  <span className="text-sm text-muted">{formatDateDMY(row.date)}</span>
+                  {row.payment_mode && <PaymentModeChip mode={row.payment_mode} />}
+                </div>
+              </div>
+
+              <span className="text-xs text-muted">{row.collection_code ?? `CL-${row.id}`}</span>
+
+              {row.notes && <p className="text-xs text-muted mt-2 border-t border-border pt-2">{row.notes}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {hasMore && <div ref={sentinelRef} className="h-1 mt-2" />}
+      {isFetching && page > 1 && (
+        <div className="py-4 flex justify-center">
+          <div className="w-5 h-5 rounded-full border-2 border-primary-500 border-t-transparent animate-spin" />
+        </div>
+      )}
     </Screen>
   );
 }

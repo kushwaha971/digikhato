@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useFormik } from "formik";
 import { useRouter } from "next/navigation";
@@ -21,6 +22,8 @@ import {
   useLogoutMutation,
   useUpdateMeMutation,
 } from "@/features/auth/auth-api";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { ROUTES } from "@/lib/routes";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { clearAuth, setCurrentUser } from "@/store/auth-slice";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
@@ -123,6 +126,8 @@ export default function SettingsPage() {
     const timer = setTimeout(() => setPasswordSaved(false), 3000);
     return () => clearTimeout(timer);
   }, [passwordSaved]);
+
+  const { isAdmin } = useRoleAccess();
 
   const handleLogout = async () => {
     try {
@@ -283,6 +288,50 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
+
+        {isAdmin && (
+          <div className="app-panel">
+            <div className="p-4 border-b border-border">
+              <h2 className="font-semibold text-text">Admin</h2>
+              <p className="text-xs text-muted mt-0.5">Manage your team and loan organisation</p>
+            </div>
+            <div className="divide-y divide-border">
+              <Link href={ROUTES.app.team} className="flex items-center justify-between px-4 py-3 hover:bg-surface2 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-600">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-text">Team</p>
+                    <p className="text-xs text-muted">Add and manage collectors</p>
+                  </div>
+                </div>
+                <svg className="w-4 h-4 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+              <Link href={ROUTES.app.loans.locations} className="flex items-center justify-between px-4 py-3 hover:bg-surface2 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-success-100 dark:bg-success-900/30 flex items-center justify-center text-success-600">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-text">Locations</p>
+                    <p className="text-xs text-muted">Create and manage borrower locations</p>
+                  </div>
+                </div>
+                <svg className="w-4 h-4 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+            </div>
+          </div>
+        )}
 
         <div className="app-panel">
           <div className="p-4 border-b border-border">

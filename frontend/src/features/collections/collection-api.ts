@@ -8,6 +8,9 @@ export interface Collection {
   collection_code?: string | null;
   loan: number;
   borrower: number;
+  borrower_name?: string | null;
+  borrower_uuid?: string | null;
+  borrower_mobile?: string | null;
   collected_by?: number;
   date: string;
   amount_paid: string | number;
@@ -26,6 +29,7 @@ export const collectionApi = api.injectEndpoints({
     listCollections: builder.query<
       PaginatedResponse<Collection>,
       {
+        search?: string;
         loan?: number;
         borrower?: number;
         status?: string;
