@@ -2,7 +2,7 @@ from django.contrib.auth.base_user import BaseUserManager
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
-from apps.common.constants import RoleChoices
+from apps.common.constants import JwlRoleCode, ModuleCode, RoleChoices
 from apps.common.models import TimeStampedModel
 
 
@@ -68,9 +68,46 @@ class User(AbstractUser, TimeStampedModel):
         return self.tenant
 
     USERNAME_FIELD = "mobile_number"
+
     REQUIRED_FIELDS = []
 
     objects = UserManager()
 
     def __str__(self) -> str:
         return f"{self.full_name} ({self.mobile_number})"
+
+
+class UserModuleRole(TimeStampedModel):
+    """Maps a user to a role within a specific module (and optionally a branch).
+
+    A single user can hold different roles in different modules:
+      - User A → Loan Module: admin
+      - User A → Jewellery ERP: cashier (branch B only)
+    """
+
+    user = models.ForeignKey(
+        "users.User",
+        on_delete=models.CASCADE,
+        related_name="module_roles",
+    )
+    module = models.CharField(max_length=50, choices=ModuleCode.choices, db_index=True)
+    # For jewellery: one of JwlRoleCode values. For future modules, extend similarly.
+    role_code = models.CharField(max_length=50, choices=JwlRoleCode.choices)
+    # null = access to all branches within this module for this tenant
+    branch_name = models.CharField(max_length=120, blank=True, default="")
+    granted_by = models.ForeignKey(
+        "users.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="granted_module_roles",
+    )
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = ("user", "module", "role_code", "branch_name")
+        indexes = [models.Index(fields=["user", "module"])]
+
+    def __str__(self) -> str:
+        branch = f" ({self.branch_name})" if self.branch_name else ""
+        return f"{self.user} → {self.module}:{self.role_code}{branch}"

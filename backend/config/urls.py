@@ -31,6 +31,8 @@ from apps.users.views import (
     TeamMemberDetailView,
     TeamView,
     ToggleTeamMemberStatusView,
+    UserModuleRoleDetailView,
+    UserModuleRoleView,
 )
 
 
@@ -79,6 +81,8 @@ urlpatterns = [
     path("api/users/team/", TeamView.as_view(), name="team"),
     path("api/users/team/<int:pk>/", TeamMemberDetailView.as_view(), name="team-member-detail"),
     path("api/users/team/<int:pk>/toggle-status/", ToggleTeamMemberStatusView.as_view(), name="team-member-toggle"),
+    path("api/users/team/<int:pk>/module-roles/", UserModuleRoleView.as_view(), name="team-member-module-roles"),
+    path("api/users/team/<int:pk>/module-roles/<int:role_id>/", UserModuleRoleDetailView.as_view(), name="team-member-module-role-detail"),
     path("api/notifications/", NotificationListView.as_view(), name="notification-list"),
     path("api/notifications/<int:pk>/read/", NotificationReadView.as_view(), name="notification-read"),
     path("api/notifications/mark-all-read/", NotificationMarkAllReadView.as_view(), name="notification-mark-all-read"),

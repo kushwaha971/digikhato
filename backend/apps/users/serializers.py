@@ -1,8 +1,8 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
-from apps.common.constants import RoleChoices
-from apps.users.models import User
+from apps.common.constants import JWL_ROLE_PERMISSIONS, JwlRoleCode, ModuleCode, RoleChoices
+from apps.users.models import User, UserModuleRole
 
 
 ROLE_PERMISSIONS = {
@@ -51,9 +51,39 @@ ROLE_PERMISSIONS = {
 }
 
 
+class UserModuleRoleSerializer(serializers.ModelSerializer):
+    jwl_permissions = serializers.SerializerMethodField()
+
+    class Meta:
+        model = UserModuleRole
+        fields = ["id", "module", "role_code", "branch_name", "is_active", "jwl_permissions", "granted_by"]
+        read_only_fields = ["id", "granted_by", "jwl_permissions"]
+
+    def get_jwl_permissions(self, obj):
+        return JWL_ROLE_PERMISSIONS.get(obj.role_code, [])
+
+
+class UserModuleRoleCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserModuleRole
+        fields = ["module", "role_code", "branch_name"]
+
+    def validate_module(self, value):
+        if value not in ModuleCode.values:
+            raise serializers.ValidationError(f"Invalid module. Choices: {ModuleCode.values}")
+        return value
+
+    def validate_role_code(self, value):
+        if value not in JwlRoleCode.values:
+            raise serializers.ValidationError(f"Invalid role. Choices: {JwlRoleCode.values}")
+        return value
+
+
 class UserSerializer(serializers.ModelSerializer):
     permissions = serializers.SerializerMethodField()
     capabilities = serializers.SerializerMethodField()
+    module_roles = serializers.SerializerMethodField()
+    feature_flags = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -70,6 +100,8 @@ class UserSerializer(serializers.ModelSerializer):
             "tenant",
             "permissions",
             "capabilities",
+            "module_roles",
+            "feature_flags",
         ]
 
     def get_permissions(self, obj):
@@ -81,6 +113,20 @@ class UserSerializer(serializers.ModelSerializer):
             "can_manage_tenants": obj.role == RoleChoices.SUPER_ADMIN,
             "can_manage_team": obj.role in (RoleChoices.SUPER_ADMIN, RoleChoices.ADMIN),
         }
+
+    def get_module_roles(self, obj):
+        roles = UserModuleRole.objects.filter(user=obj, is_active=True).select_related()
+        return UserModuleRoleSerializer(roles, many=True).data
+
+    def get_feature_flags(self, obj):
+        # Resolve the tenant root (admin user) whose BusinessProfile holds the flags.
+        tenant_user = obj if obj.role == RoleChoices.ADMIN else obj.tenant
+        if not tenant_user:
+            return {}
+        try:
+            return tenant_user.business_profile.feature_flags or {}
+        except Exception:
+            return {}
 
 
 class UserPreferenceSerializer(serializers.ModelSerializer):

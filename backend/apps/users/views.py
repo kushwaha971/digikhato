@@ -9,10 +9,12 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 
 from apps.common.audit import log_action
-from apps.users.models import User
+from apps.users.models import User, UserModuleRole
 from apps.users.serializers import (
     MobileTokenObtainSerializer,
     PasswordChangeSerializer,
+    UserModuleRoleCreateSerializer,
+    UserModuleRoleSerializer,
     ResetPasswordRequiredSerializer,
     SignupSerializer,
     UserPreferenceSerializer,
@@ -362,3 +364,74 @@ class ToggleTeamMemberStatusView(APIView):
                    object_id=member.pk,
                    detail=f"{'Activated' if new_status else 'Deactivated'}: {member.mobile_number}")
         return Response(UserSerializer(member).data)
+
+
+class UserModuleRoleView(APIView):
+    """List and assign module roles for a team member.
+
+    GET  /api/users/team/<pk>/module-roles/   → list active module roles
+    POST /api/users/team/<pk>/module-roles/   → assign a new module role
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _require_admin(self, request):
+        if request.user.role not in ("admin", "super_admin"):
+            raise PermissionDenied("Only admins can manage module roles.")
+
+    def _get_member(self, request, pk):
+        if request.user.role == "super_admin":
+            return User.objects.filter(pk=pk).first()
+        return User.objects.filter(pk=pk, tenant=request.user).first()
+
+    def get(self, request, pk):
+        self._require_admin(request)
+        member = self._get_member(request, pk)
+        if not member:
+            return Response(NOT_FOUND, status=status.HTTP_404_NOT_FOUND)
+        roles = UserModuleRole.objects.filter(user=member, is_active=True)
+        return Response(UserModuleRoleSerializer(roles, many=True).data)
+
+    def post(self, request, pk):
+        self._require_admin(request)
+        member = self._get_member(request, pk)
+        if not member:
+            return Response(NOT_FOUND, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = UserModuleRoleCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        role = UserModuleRole.objects.create(
+            user=member,
+            granted_by=request.user,
+            **serializer.validated_data,
+        )
+        log_action(request, "assign_module_role", model_name="UserModuleRole",
+                   object_id=role.pk,
+                   detail=f"Assigned {role.module}:{role.role_code} to {member.mobile_number}")
+        return Response(UserModuleRoleSerializer(role).data, status=status.HTTP_201_CREATED)
+
+
+class UserModuleRoleDetailView(APIView):
+    """Deactivate (soft-remove) a specific module role assignment.
+
+    DELETE /api/users/team/<pk>/module-roles/<role_id>/
+    """
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk, role_id):
+        if request.user.role not in ("admin", "super_admin"):
+            raise PermissionDenied("Only admins can manage module roles.")
+
+        if request.user.role == "super_admin":
+            role = UserModuleRole.objects.filter(pk=role_id, user_id=pk).first()
+        else:
+            role = UserModuleRole.objects.filter(pk=role_id, user_id=pk, user__tenant=request.user).first()
+
+        if not role:
+            return Response(NOT_FOUND, status=status.HTTP_404_NOT_FOUND)
+
+        role.is_active = False
+        role.save(update_fields=["is_active"])
+        log_action(request, "revoke_module_role", model_name="UserModuleRole",
+                   object_id=role.pk,
+                   detail=f"Revoked {role.module}:{role.role_code} from user {pk}")
+        return Response(status=status.HTTP_204_NO_CONTENT)
