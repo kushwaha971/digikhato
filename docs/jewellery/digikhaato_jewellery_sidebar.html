@@ -1,0 +1,358 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-sans); font-size: 14px; }
+.layout { display: flex; height: 600px; border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); overflow: hidden; background: var(--color-background-primary); }
+.sidebar { width: 260px; min-width: 260px; border-right: 0.5px solid var(--color-border-tertiary); display: flex; flex-direction: column; background: var(--color-background-secondary); overflow: hidden; }
+.sidebar-header { padding: 14px 16px 10px; border-bottom: 0.5px solid var(--color-border-tertiary); }
+.brand { font-size: 13px; font-weight: 500; color: var(--color-text-primary); }
+.brand span { color: #C49A22; }
+.module-label { font-size: 11px; color: var(--color-text-tertiary); margin-top: 2px; letter-spacing: 0.03em; }
+.sidebar-scroll { flex: 1; overflow-y: auto; padding: 8px 0; }
+.sidebar-scroll::-webkit-scrollbar { width: 4px; }
+.sidebar-scroll::-webkit-scrollbar-thumb { background: var(--color-border-tertiary); border-radius: 2px; }
+.section-label { font-size: 10px; font-weight: 500; color: var(--color-text-tertiary); letter-spacing: 0.07em; text-transform: uppercase; padding: 10px 16px 4px; }
+.nav-item { display: flex; align-items: center; gap: 8px; padding: 6px 16px; cursor: pointer; user-select: none; }
+.nav-item:hover { background: var(--color-background-primary); }
+.nav-item.active { background: var(--color-background-primary); }
+.nav-icon { width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 500; }
+.nav-text { font-size: 13px; color: var(--color-text-secondary); flex: 1; }
+.nav-item.active .nav-text { color: var(--color-text-primary); font-weight: 500; }
+.chevron { font-size: 10px; color: var(--color-text-tertiary); transition: transform 0.15s; }
+.chevron.open { transform: rotate(90deg); }
+.sub-items { overflow: hidden; }
+.sub-item { display: flex; align-items: center; gap: 8px; padding: 4px 16px 4px 40px; cursor: pointer; }
+.sub-item:hover .sub-text { color: var(--color-text-primary); }
+.sub-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--color-border-secondary); flex-shrink: 0; }
+.sub-item.active .sub-dot { background: #C49A22; }
+.sub-text { font-size: 12px; color: var(--color-text-tertiary); }
+.sub-item.active .sub-text { color: var(--color-text-primary); font-weight: 500; }
+.content { flex: 1; padding: 24px; overflow-y: auto; }
+.content-header { margin-bottom: 20px; }
+.content-title { font-size: 18px; font-weight: 500; color: var(--color-text-primary); margin-bottom: 4px; }
+.content-desc { font-size: 13px; color: var(--color-text-secondary); line-height: 1.5; }
+.feature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.feature-card { background: var(--color-background-secondary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); padding: 12px 14px; }
+.feature-name { font-size: 12px; font-weight: 500; color: var(--color-text-primary); margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+.feature-tag { font-size: 10px; padding: 2px 6px; border-radius: 3px; background: #FAF0D6; color: #8B6914; border: 0.5px solid #E8D498; }
+.feature-list { list-style: none; }
+.feature-list li { font-size: 11px; color: var(--color-text-secondary); padding: 2px 0; display: flex; align-items: flex-start; gap: 5px; line-height: 1.4; }
+.feature-list li::before { content: '·'; color: #C49A22; font-weight: 700; margin-top: 0px; flex-shrink: 0; }
+.badge { font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 500; }
+.badge-blue { background: var(--color-background-info); color: var(--color-text-info); }
+.badge-green { background: var(--color-background-success); color: var(--color-text-success); }
+</style>
+
+<div class="layout">
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <div class="brand">Digi<span>Khaato</span></div>
+      <div class="module-label">Jewellery ERP Module</div>
+    </div>
+    <div class="sidebar-scroll" id="sidebar">
+
+      <div class="section-label">Overview</div>
+      <div class="nav-item" onclick="select(this,'overview')">
+        <div class="nav-icon" style="background:#EEF2F8;color:#185FA5;">◈</div>
+        <span class="nav-text">Dashboard</span>
+      </div>
+
+      <div class="section-label">Modules 1–8</div>
+
+      <div class="nav-item" onclick="toggle('billing',this,'billing-overview')">
+        <div class="nav-icon" style="background:#FAF0D6;color:#8B6914;">₹</div>
+        <span class="nav-text">Billing & Sales</span>
+        <span class="chevron" id="chev-billing">›</span>
+      </div>
+      <div class="sub-items" id="sub-billing" style="max-height:0">
+        <div class="sub-item" onclick="selectSub(this,'billing-overview')"><div class="sub-dot"></div><span class="sub-text">Tax invoice (GST)</span></div>
+        <div class="sub-item" onclick="selectSub(this,'billing-overview')"><div class="sub-dot"></div><span class="sub-text">Estimate / Quotation</span></div>
+        <div class="sub-item" onclick="selectSub(this,'billing-overview')"><div class="sub-dot"></div><span class="sub-text">Sale return / credit note</span></div>
+        <div class="sub-item" onclick="selectSub(this,'billing-overview')"><div class="sub-dot"></div><span class="sub-text">Old gold exchange</span></div>
+        <div class="sub-item" onclick="selectSub(this,'billing-overview')"><div class="sub-dot"></div><span class="sub-text">E-invoice (IRN+QR)</span></div>
+        <div class="sub-item" onclick="selectSub(this,'billing-overview')"><div class="sub-dot"></div><span class="sub-text">Split payment modes</span></div>
+        <div class="sub-item" onclick="selectSub(this,'billing-overview')"><div class="sub-dot"></div><span class="sub-text">Print templates</span></div>
+        <div class="sub-item" onclick="selectSub(this,'billing-overview')"><div class="sub-dot"></div><span class="sub-text">WhatsApp / SMS send</span></div>
+      </div>
+
+      <div class="nav-item" onclick="toggle('inventory',this,'inventory-overview')">
+        <div class="nav-icon" style="background:#E1F5EE;color:#0F6E56;">▦</div>
+        <span class="nav-text">Stock & Inventory</span>
+        <span class="chevron" id="chev-inventory">›</span>
+      </div>
+      <div class="sub-items" id="sub-inventory" style="max-height:0">
+        <div class="sub-item" onclick="selectSub(this,'inventory-overview')"><div class="sub-dot"></div><span class="sub-text">Item master</span></div>
+        <div class="sub-item" onclick="selectSub(this,'inventory-overview')"><div class="sub-dot"></div><span class="sub-text">Purity tracking</span></div>
+        <div class="sub-item" onclick="selectSub(this,'inventory-overview')"><div class="sub-dot"></div><span class="sub-text">Barcode / QR / RFID tagging</span></div>
+        <div class="sub-item" onclick="selectSub(this,'inventory-overview')"><div class="sub-dot"></div><span class="sub-text">HUID / BIS hallmark</span></div>
+        <div class="sub-item" onclick="selectSub(this,'inventory-overview')"><div class="sub-dot"></div><span class="sub-text">Physical stock-take</span></div>
+        <div class="sub-item" onclick="selectSub(this,'inventory-overview')"><div class="sub-dot"></div><span class="sub-text">Live MCX valuation</span></div>
+        <div class="sub-item" onclick="selectSub(this,'inventory-overview')"><div class="sub-dot"></div><span class="sub-text">Item chain of custody</span></div>
+      </div>
+
+      <div class="nav-item" onclick="toggle('karigar',this,'karigar-overview')">
+        <div class="nav-icon" style="background:#FAECE7;color:#993C1D;">⚒</div>
+        <span class="nav-text">Order & Karigar</span>
+        <span class="chevron" id="chev-karigar">›</span>
+      </div>
+      <div class="sub-items" id="sub-karigar" style="max-height:0">
+        <div class="sub-item" onclick="selectSub(this,'karigar-overview')"><div class="sub-dot"></div><span class="sub-text">Customer order</span></div>
+        <div class="sub-item" onclick="selectSub(this,'karigar-overview')"><div class="sub-dot"></div><span class="sub-text">Metal issue voucher</span></div>
+        <div class="sub-item" onclick="selectSub(this,'karigar-overview')"><div class="sub-dot"></div><span class="sub-text">Karigar receipt</span></div>
+        <div class="sub-item" onclick="selectSub(this,'karigar-overview')"><div class="sub-dot"></div><span class="sub-text">Tunch reconciliation</span></div>
+        <div class="sub-item" onclick="selectSub(this,'karigar-overview')"><div class="sub-dot"></div><span class="sub-text">Wastage reconciliation</span></div>
+        <div class="sub-item" onclick="selectSub(this,'karigar-overview')"><div class="sub-dot"></div><span class="sub-text">Labour bill</span></div>
+        <div class="sub-item" onclick="selectSub(this,'karigar-overview')"><div class="sub-dot"></div><span class="sub-text">Repair / alteration</span></div>
+      </div>
+
+      <div class="nav-item" onclick="select(this,'accounts-overview')">
+        <div class="nav-icon" style="background:#EEF2F8;color:#185FA5;">⊞</div>
+        <span class="nav-text">Accounts & Ledger</span>
+        <span class="chevron" style="visibility:hidden">›</span>
+      </div>
+
+      <div class="nav-item" onclick="select(this,'gst-overview')">
+        <div class="nav-icon" style="background:#EAF3DE;color:#3B6D11;">✦</div>
+        <span class="nav-text">GST & Reports</span>
+        <span class="chevron" style="visibility:hidden">›</span>
+      </div>
+
+      <div class="nav-item" onclick="select(this,'outstanding-overview')">
+        <div class="nav-icon" style="background:#FAEEDA;color:#854F0B;">⇄</div>
+        <span class="nav-text">Party Outstanding</span>
+        <span class="chevron" style="visibility:hidden">›</span>
+      </div>
+
+      <div class="nav-item" onclick="toggle('pledge',this,'pledge-overview')">
+        <div class="nav-icon" style="background:#FAF0D6;color:#8B6914;">⬡</div>
+        <span class="nav-text">Gold Pledge Loans</span>
+        <span class="chevron" id="chev-pledge">›</span>
+      </div>
+      <div class="sub-items" id="sub-pledge" style="max-height:0">
+        <div class="sub-item" onclick="selectSub(this,'pledge-overview')"><div class="sub-dot"></div><span class="sub-text">KYC capture</span></div>
+        <div class="sub-item" onclick="selectSub(this,'pledge-overview')"><div class="sub-dot"></div><span class="sub-text">Pledge entry</span></div>
+        <div class="sub-item" onclick="selectSub(this,'pledge-overview')"><div class="sub-dot"></div><span class="sub-text">Loan disbursal</span></div>
+        <div class="sub-item" onclick="selectSub(this,'pledge-overview')"><div class="sub-dot"></div><span class="sub-text">Interest schemes</span></div>
+        <div class="sub-item" onclick="selectSub(this,'pledge-overview')"><div class="sub-dot"></div><span class="sub-text">Top-up / Renewal</span></div>
+        <div class="sub-item" onclick="selectSub(this,'pledge-overview')"><div class="sub-dot"></div><span class="sub-text">Foreclosure</span></div>
+        <div class="sub-item" onclick="selectSub(this,'pledge-overview')"><div class="sub-dot"></div><span class="sub-text">Auction & P&L</span></div>
+      </div>
+
+      <div class="section-label">Modules 9–15</div>
+
+      <div class="nav-item" onclick="select(this,'users-overview')">
+        <div class="nav-icon" style="background:#EEEDFE;color:#534AB7;">◉</div>
+        <span class="nav-text">Users & Roles</span>
+        <span class="chevron" style="visibility:hidden">›</span>
+      </div>
+      <div class="nav-item" onclick="select(this,'branch-overview')">
+        <div class="nav-icon" style="background:#E1F5EE;color:#0F6E56;">⊕</div>
+        <span class="nav-text">Multi-Branch</span>
+        <span class="chevron" style="visibility:hidden">›</span>
+      </div>
+      <div class="nav-item" onclick="select(this,'rfid-overview')">
+        <div class="nav-icon" style="background:#FAECE7;color:#993C1D;">▣</div>
+        <span class="nav-text">Barcode / RFID</span>
+        <span class="chevron" style="visibility:hidden">›</span>
+      </div>
+      <div class="nav-item" onclick="select(this,'mcx-overview')">
+        <div class="nav-icon" style="background:#FAF0D6;color:#8B6914;">↑</div>
+        <span class="nav-text">MCX Live Rate</span>
+        <span class="chevron" style="visibility:hidden">›</span>
+      </div>
+      <div class="nav-item" onclick="select(this,'notif-overview')">
+        <div class="nav-icon" style="background:#EEF2F8;color:#185FA5;">✉</div>
+        <span class="nav-text">Notifications</span>
+        <span class="chevron" style="visibility:hidden">›</span>
+      </div>
+      <div class="nav-item" onclick="select(this,'admin-overview')">
+        <div class="nav-icon" style="background:#F1EFE8;color:#5F5E5A;">⚙</div>
+        <span class="nav-text">Admin Controls</span>
+        <span class="chevron" style="visibility:hidden">›</span>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="content" id="content">
+    <div class="content-header">
+      <div class="content-title">Billing & Sales</div>
+      <div class="content-desc">Create, print, share, and manage all sales-side documents. Supports GST and non-GST flows, old gold exchange, e-invoice, and multi-mode payments.</div>
+    </div>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-name">Tax invoice <span class="feature-tag">GST</span></div>
+        <ul class="feature-list">
+          <li>B2C and B2B invoice types</li>
+          <li>CGST / SGST / IGST split</li>
+          <li>IRN + QR via GSP</li>
+          <li>E-way bill data prep</li>
+        </ul>
+      </div>
+      <div class="feature-card">
+        <div class="feature-name">Estimate / Quotation</div>
+        <ul class="feature-list">
+          <li>No tax impact</li>
+          <li>One-click convert to invoice</li>
+          <li>PDF share via WhatsApp</li>
+        </ul>
+      </div>
+      <div class="feature-card">
+        <div class="feature-name">Old gold exchange</div>
+        <ul class="feature-list">
+          <li>Purity test entry</li>
+          <li>URD purchase voucher</li>
+          <li>Deduction from bill total</li>
+        </ul>
+      </div>
+      <div class="feature-card">
+        <div class="feature-name">Payments</div>
+        <ul class="feature-list">
+          <li>Cash + UPI + Card + Bank</li>
+          <li>Advance adjustment</li>
+          <li>UPI deeplink on invoice</li>
+        </ul>
+      </div>
+      <div class="feature-card">
+        <div class="feature-name">Print & share</div>
+        <ul class="feature-list">
+          <li>A4, A5, thermal 80/58mm</li>
+          <li>Multi-template per tenant</li>
+          <li>WhatsApp / SMS / Email</li>
+        </ul>
+      </div>
+      <div class="feature-card">
+        <div class="feature-name">Sale return <span class="feature-tag">Credit note</span></div>
+        <ul class="feature-list">
+          <li>Linked to original invoice</li>
+          <li>GST credit note generated</li>
+          <li>Refund mode selection</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const pages = {
+  'overview': { title: 'Dashboard', desc: 'Overview of DigiKhaato Jewellery ERP module — sales, stock, karigar, accounts, and gold pledge loans.', cards: [] },
+  'billing-overview': { title: 'Billing & Sales', desc: 'Create, print, share, and manage all sales-side documents including GST invoices, estimates, sale returns, and old gold exchange.', cards: [
+    { name: 'Tax invoice', tag: 'GST', items: ['B2C and B2B invoice types','CGST / SGST / IGST split','IRN + QR via GSP','E-way bill data prep'] },
+    { name: 'Estimate / Quotation', items: ['No tax impact','One-click convert to invoice','PDF share via WhatsApp'] },
+    { name: 'Old gold exchange', items: ['Purity test entry','URD purchase voucher','Deduction from bill total'] },
+    { name: 'Payments', items: ['Cash + UPI + Card + Bank','Advance adjustment','UPI deeplink on invoice'] },
+    { name: 'Print & share', items: ['A4, A5, thermal 80/58mm','Multi-template per tenant','WhatsApp / SMS / Email'] },
+    { name: 'Sale return', tag: 'Credit note', items: ['Linked to original invoice','GST credit note generated','Refund mode selection'] },
+  ]},
+  'inventory-overview': { title: 'Stock & Inventory', desc: 'Track every piece of jewellery and bulk metal across branches in real time with full weight and purity detail.', cards: [
+    { name: 'Item master', items: ['Gold, silver, diamond, kundan…','Gross/net/stone/charge weight','Purity: 22K, 18K, 14K, 9K…'] },
+    { name: 'Tagging', tag: 'RFID/QR', items: ['Barcode, QR, RFID tag types','HUID linkage per article','Bulk print on-demand'] },
+    { name: 'Stock movements', items: ['Purchase in / sale out','Karigar issue & receive','Inter-branch transfer'] },
+    { name: 'Physical stock-take', items: ['Counted vs system weight','Discrepancy report','Variance accept workflow'] },
+    { name: 'Valuation', items: ['Live MCX rate link','Purity-adjusted value','Slow-moving / dead stock'] },
+    { name: 'Item history', items: ['Supplier → karigar → branch','Chain of custody full trail','Bin / locker location'] },
+  ]},
+  'karigar-overview': { title: 'Order & Karigar Management', desc: 'Manage custom jewellery orders end-to-end and track artisan metal issue, receipt, wastage, and labour.', cards: [
+    { name: 'Customer order', items: ['Design selection / custom','Advance payment capture','Expected delivery date'] },
+    { name: 'Order workflow', tag: '9 stages', items: ['Booked → WIP → QC','Hallmarked → Delivered','Full status audit trail'] },
+    { name: 'Metal issue', items: ['Gross weight + tunch %','Pure gold accounting','Karigar-wise voucher'] },
+    { name: 'Karigar receipt', items: ['Finished piece weight','Wastage actual vs allowed','Labour amount entry'] },
+    { name: 'Reconciliation', items: ['Tunch: issued vs received','Wastage: allowed vs actual','Karigar ledger auto-update'] },
+    { name: 'Labour billing', items: ['Per piece or monthly bulk','TDS deduction handling','Karigar advance / payment'] },
+  ]},
+  'pledge-overview': { title: 'Gold Pledge Loans', desc: 'Disburse gold-secured loans, accrue interest, and manage pledged ornaments. Separate from — and complementary to — the existing DigiKhaato Loan Management module.', cards: [
+    { name: 'KYC & pledge', items: ['PAN / Aadhaar (masked)','Ornament photo + purity test','Multiple items per loan'] },
+    { name: 'Loan calculation', tag: 'LTV', items: ['LTV % of pledge value','Scheme-based config','Live MCX rate used'] },
+    { name: 'Interest schemes', items: ['Simple / compound / flat','Monthly or daily basis','Per-scheme rate config'] },
+    { name: 'Disbursal', items: ['Cash, bank, UPI, cheque','2-person approval above threshold','Full audit trail'] },
+    { name: 'Top-up / Renewal', items: ['Additional disbursement','Interest-only renewal','Carry-forward principal'] },
+    { name: 'Foreclosure & auction', items: ['Rebate on early close','Auction P&L tracking','Statutory register print'] },
+  ]},
+  'accounts-overview': { title: 'Accounts & Ledger', desc: 'Full double-entry accounting tied to every business transaction with Indian COA defaults.', cards: [
+    { name: 'Chart of accounts', items: ['Indian COA defaults','Customizable structure','Party metal+amount ledger'] },
+    { name: 'Vouchers', items: ['Receipt, Payment, Journal','Contra, Sales, Purchase','Credit/Debit note'] },
+    { name: 'Reports', items: ['Trial balance','P&L, Balance sheet','Cash/Bank/Day book'] },
+    { name: 'Bank reconciliation', items: ['Manual matching','CSV/MT940 import','Auto-match by narration'] },
+  ]},
+  'gst-overview': { title: 'GST & Reports', desc: 'Indian GST compliance plus full business intelligence reporting.', cards: [
+    { name: 'GST returns', tag: 'GSTN', items: ['GSTR-1 prep','GSTR-3B prep','HSN-wise summary'] },
+    { name: 'E-invoice', items: ['IRN generation via GSP','Signed QR on invoice','B2B above threshold'] },
+    { name: 'Reports', items: ['Sales/purchase register','Profitability by item/party','Exportable PDF/Excel/CSV'] },
+  ]},
+  'outstanding-overview': { title: 'Party Outstanding', desc: 'Manage outstanding metal AND amount with parties — uniquely jewellery-specific dual-balance ledger.', cards: [
+    { name: 'Dual balance', items: ['Fine grams + amount','Per-party ageing','0–30, 31–60, 61–90, 90+'] },
+    { name: 'Settlement', items: ['Bhav cut conversion','Adjustment vouchers','Auto WhatsApp reminder'] },
+  ]},
+  'users-overview': { title: 'Users & Roles', desc: 'Role-based access control, staff lifecycle, and approval chains.', cards: [
+    { name: 'Role matrix', items: ['Admin, Manager, Cashier…','Gold Pledge Officer role','Custom roles supported'] },
+    { name: 'Security', items: ['2FA per role / per action','Device login alerts','Session management'] },
+  ]},
+  'branch-overview': { title: 'Multi-Branch', desc: 'Operate multiple physical branches with central oversight and inter-branch transfers.', cards: [
+    { name: 'Branch master', items: ['Per-branch GSTIN','FY-aware number series','Branch-wise cashbooks'] },
+    { name: 'Transfers', items: ['Request → Approve → Dispatch','In-transit tracking','Receive & reconcile'] },
+  ]},
+  'rfid-overview': { title: 'Barcode / Tagging / RFID', desc: 'Physical-to-digital binding for every piece of jewellery.', cards: [
+    { name: 'Tag types', items: ['Code128 barcode','QR with structured payload','UHF passive RFID'] },
+    { name: 'Operations', items: ['Bulk print on-demand','Template designer','Full scan history'] },
+  ]},
+  'mcx-overview': { title: 'MCX Live Rate', desc: 'Always price at the right rate with live MCX feeds and branch-level overrides.', cards: [
+    { name: 'Live feed', items: ['Gold 995/999, Silver 999/925','60s refresh, stale flag','Rate history + CSV export'] },
+    { name: 'Configuration', items: ['Per-branch override + reason','Buy/sell/estimate rates','15-min rate freeze per bill'] },
+  ]},
+  'notif-overview': { title: 'Notifications', desc: 'WhatsApp, SMS and email integration for invoices, reminders, and broadcasts.', cards: [
+    { name: 'Channels', items: ['WhatsApp Business API','SMS via DLT-registered gateway','Email via SES'] },
+    { name: 'Triggers', items: ['Invoice, payment due','Gold pledge loan due','Occasion greetings'] },
+    { name: 'Broadcast', items: ['Segment by last visit / spend','DND/opt-out compliance','Delivery report tracking'] },
+  ]},
+  'admin-overview': { title: 'Admin Controls', desc: 'Tenant-level configuration, governance, and data management.', cards: [
+    { name: 'Configuration', items: ['GSTIN, PAN, logo, FY start','Tax slab versioning','Number series per branch'] },
+    { name: 'Data & backup', items: ['Manual + scheduled backup','Full JSON/CSV export','Trash / 30-day recovery'] },
+    { name: 'Governance', items: ['Audit log viewer','Feature flags','Locked-period management'] },
+  ]},
+};
+
+let activeNav = null, activeSub = null;
+
+function renderContent(key) {
+  const p = pages[key]; if(!p) return;
+  const c = document.getElementById('content');
+  if(!p.cards || !p.cards.length) {
+    c.innerHTML = `<div class="content-header"><div class="content-title">${p.title}</div><div class="content-desc">${p.desc}</div></div><p style="font-size:13px;color:var(--color-text-tertiary);margin-top:8px;">Select a sub-feature from the sidebar to explore details.</p>`;
+    return;
+  }
+  const cards = p.cards.map(card => `
+    <div class="feature-card">
+      <div class="feature-name">${card.name}${card.tag?` <span class="feature-tag">${card.tag}</span>`:''}</div>
+      <ul class="feature-list">${card.items.map(i=>`<li>${i}</li>`).join('')}</ul>
+    </div>`).join('');
+  c.innerHTML = `<div class="content-header"><div class="content-title">${p.title}</div><div class="content-desc">${p.desc}</div></div><div class="feature-grid">${cards}</div>`;
+}
+
+function select(el, key) {
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  el.classList.add('active');
+  activeNav = el;
+  renderContent(key);
+}
+
+function toggle(id, el, key) {
+  const sub = document.getElementById('sub-'+id);
+  const chev = document.getElementById('chev-'+id);
+  const isOpen = sub.style.maxHeight !== '0px' && sub.style.maxHeight !== '0';
+  document.querySelectorAll('.sub-items').forEach(s=>s.style.maxHeight='0');
+  document.querySelectorAll('.chevron').forEach(c=>c.classList.remove('open'));
+  if(!isOpen){ sub.style.maxHeight='999px'; chev.classList.add('open'); }
+  select(el, key);
+}
+
+function selectSub(el, key) {
+  document.querySelectorAll('.sub-item').forEach(s=>s.classList.remove('active'));
+  el.classList.add('active');
+  renderContent(key);
+}
+
+document.querySelector('.nav-item').classList.add('active');
+renderContent('billing-overview');
+document.getElementById('sub-billing').style.maxHeight='999px';
+document.getElementById('chev-billing').classList.add('open');
+</script>
