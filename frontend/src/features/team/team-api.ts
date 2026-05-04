@@ -1,12 +1,16 @@
 import { api } from "@/store/api";
 import type { TeamMemberRole } from "@/constants/form-options";
 import type { AuthUser } from "@/store/auth-slice";
+import type { AppModuleCode } from "@/lib/routes";
 
 export interface CreateTeamMemberRequest {
   full_name: string;
   mobile_number: string;
   role: TeamMemberRole;
   branch_name?: string;
+  module_access?: AppModuleCode[];
+  allow_all_modules?: boolean;
+  seed_jewellery_defaults?: boolean;
 }
 
 export interface ModuleTeamRole {

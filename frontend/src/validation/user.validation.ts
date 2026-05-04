@@ -1,6 +1,7 @@
 import * as Yup from "yup";
 
 import { TEAM_MEMBER_ROLE_VALUES, type TeamMemberRole } from "@/constants/form-options";
+import { APP_MODULES, type AppModuleCode } from "@/lib/routes";
 import {
   mobileSchema,
   normalizeMobile,
@@ -32,6 +33,9 @@ export type CreateTenantFormValues = {
   full_name: string;
   mobile_number: string;
   branch_name: string;
+  module_access: AppModuleCode[];
+  allow_all_modules: boolean;
+  seed_jewellery_defaults: boolean;
 };
 
 export const createTenantValidationSchema = Yup.object({
@@ -41,12 +45,21 @@ export const createTenantValidationSchema = Yup.object({
     .transform((v) => (typeof v === "string" ? v.trim() : v))
     .max(120, "Branch name must be at most 120 characters")
     .notRequired(),
+  module_access: Yup.array()
+    .of(Yup.mixed<AppModuleCode>().oneOf([...APP_MODULES]).required())
+    .min(1, "Select at least one module")
+    .required("Select at least one module"),
+  allow_all_modules: Yup.boolean().required(),
+  seed_jewellery_defaults: Yup.boolean().required(),
 });
 
 export const createTenantInitialValues: CreateTenantFormValues = {
   full_name: "",
   mobile_number: "",
   branch_name: "",
+  module_access: [...APP_MODULES],
+  allow_all_modules: true,
+  seed_jewellery_defaults: true,
 };
 
 export const normalizeUserValues = <T extends { mobile_number: string }>(values: T): T => ({

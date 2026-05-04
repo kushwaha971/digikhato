@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.management import call_command
 from django.db.models.deletion import ProtectedError
 from django.db.models import Q
 from rest_framework import generics, serializers, status
@@ -40,6 +41,45 @@ def get_effective_tenant(user):
 
 def _is_valid_module(module: str) -> bool:
     return module in ModuleCode.values
+
+
+def _as_bool(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    if isinstance(value, (int, float)):
+        return value != 0
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _parse_module_access(raw_modules, *, allow_all_modules: bool) -> list[str]:
+    if allow_all_modules:
+        return list(ModuleCode.values)
+
+    if raw_modules is None:
+        return []
+
+    if isinstance(raw_modules, str):
+        modules = [part.strip() for part in raw_modules.split(",") if part.strip()]
+    elif isinstance(raw_modules, list):
+        modules = [str(part).strip() for part in raw_modules if str(part).strip()]
+    else:
+        raise serializers.ValidationError({"module_access": "Expected an array of module codes."})
+
+    invalid = [module for module in modules if not _is_valid_module(module)]
+    if invalid:
+        raise serializers.ValidationError(
+            {"module_access": f"Invalid modules: {invalid}. Choices: {list(ModuleCode.values)}"}
+        )
+
+    deduped: list[str] = []
+    seen = set()
+    for module in modules:
+        if module not in seen:
+            deduped.append(module)
+            seen.add(module)
+    return deduped
 
 
 def _module_self_onboard_allowed(user, module: str) -> bool:
@@ -316,7 +356,28 @@ class TeamView(generics.ListCreateAPIView):
     def create(self, request, *args, **kwargs):
         if request.user.role not in ("admin", "super_admin"):
             raise PermissionDenied("Only admins can create team members.")
-        signup_serializer = SignupSerializer(data=request.data, context={"request": request})
+
+        target_role = str(request.data.get("role", "")).strip()
+        allow_all_modules = _as_bool(request.data.get("allow_all_modules"))
+        seed_jewellery_defaults = _as_bool(request.data.get("seed_jewellery_defaults"))
+        module_access: list[str] = []
+        if request.user.role == RoleChoices.SUPER_ADMIN and target_role == RoleChoices.ADMIN:
+            module_access = _parse_module_access(
+                request.data.get("module_access"),
+                allow_all_modules=allow_all_modules,
+            )
+            if seed_jewellery_defaults and ModuleCode.JEWELLERY not in module_access:
+                raise serializers.ValidationError(
+                    {"seed_jewellery_defaults": "Enable jewellery module access to seed jewellery defaults."}
+                )
+
+        payload = {
+            "full_name": request.data.get("full_name"),
+            "mobile_number": request.data.get("mobile_number"),
+            "role": request.data.get("role"),
+            "branch_name": request.data.get("branch_name", ""),
+        }
+        signup_serializer = SignupSerializer(data=payload, context={"request": request})
         signup_serializer.is_valid(raise_exception=True)
         user = signup_serializer.save()
 
@@ -326,6 +387,14 @@ class TeamView(generics.ListCreateAPIView):
         user.created_by = request.user
         user.must_reset_password = True
         user.save(update_fields=["tenant", "created_by", "must_reset_password"])
+
+        # Super-admin tenant onboarding can include module-access setup in one step.
+        if request.user.role == RoleChoices.SUPER_ADMIN and user.role == RoleChoices.ADMIN:
+            for module in module_access:
+                _activate_module_for_user(actor=request.user, target_user=user, module=module)
+
+            if seed_jewellery_defaults and ModuleCode.JEWELLERY in module_access:
+                call_command("seed_jewellery_defaults", tenant_id=user.id)
 
         # Borrower login path: ensure a Borrower profile exists and is linked to this user.
         if user.role == "borrower":
