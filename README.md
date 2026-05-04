@@ -17,6 +17,17 @@ cd backend && docker compose up --build -d
 cd ../frontend && docker compose up --build
 ```
 
+## Deploy on Railway (Monorepo)
+- Create 2 Railway services from the same repo:
+  - Frontend service root directory: `/frontend`
+  - Backend service root directory: `/backend`
+- In each service, set **Config as Code path**:
+  - Frontend: `/frontend/railway.json`
+  - Backend: `/backend/railway.json`
+- Required env vars:
+  - Backend: `POSTGRES_HOST`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_PORT`, `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`
+  - Frontend: `NEXT_PUBLIC_API_BASE_URL`
+
 ## Environment
 - Backend variables: create [`backend/.env`](/Users/akashkushwaha/Projects/money-mgmt/backend/.env) from [`backend/.env.example`](/Users/akashkushwaha/Projects/money-mgmt/backend/.env.example)
 - Frontend variables: create [`frontend/.env.local`](/Users/akashkushwaha/Projects/money-mgmt/frontend/.env.local) from [`frontend/.env.local.example`](/Users/akashkushwaha/Projects/money-mgmt/frontend/.env.local.example)
