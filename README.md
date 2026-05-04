@@ -24,6 +24,9 @@ cd ../frontend && docker compose up --build
 - In each service, set **Config as Code path**:
   - Frontend: `/frontend/railway.json`
   - Backend: `/backend/railway.json`
+- `frontend/railway.json` and `backend/railway.json` are configured to use Dockerfiles:
+  - `/frontend/Dockerfile.railway`
+  - `/backend/Dockerfile.railway`
 - Required env vars:
   - Backend: `POSTGRES_HOST`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_PORT`, `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`
   - Frontend: `NEXT_PUBLIC_API_BASE_URL`
@@ -34,7 +37,7 @@ cd ../frontend && docker compose up --build
   - Correct: `/frontend/railway.json`
   - Wrong: `frontend/railway.json`
 - If Railway deploys from repo root by mistake, this repo now has a root `package.json` fallback that builds/starts the frontend automatically.
-- For backend deployments, still use service root directory `/backend` (or config path `/backend/railway.json`).
+- For backend deployments, still use service root directory `/backend` (or config path `/backend/railway.json`) to avoid Node root autodetection.
 
 ## Environment
 - Backend variables: create [`backend/.env`](/Users/akashkushwaha/Projects/money-mgmt/backend/.env) from [`backend/.env.example`](/Users/akashkushwaha/Projects/money-mgmt/backend/.env.example)
