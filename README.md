@@ -28,6 +28,14 @@ cd ../frontend && docker compose up --build
   - Backend: `POSTGRES_HOST`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_PORT`, `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`
   - Frontend: `NEXT_PUBLIC_API_BASE_URL`
 
+### Railway Troubleshooting
+- If logs show `skipping 'railway.json' ... not rooted at a valid path`, the Config as Code path is not absolute.
+- Use a leading slash:
+  - Correct: `/frontend/railway.json`
+  - Wrong: `frontend/railway.json`
+- If Railway deploys from repo root by mistake, this repo now has a root `package.json` fallback that builds/starts the frontend automatically.
+- For backend deployments, still use service root directory `/backend` (or config path `/backend/railway.json`).
+
 ## Environment
 - Backend variables: create [`backend/.env`](/Users/akashkushwaha/Projects/money-mgmt/backend/.env) from [`backend/.env.example`](/Users/akashkushwaha/Projects/money-mgmt/backend/.env.example)
 - Frontend variables: create [`frontend/.env.local`](/Users/akashkushwaha/Projects/money-mgmt/frontend/.env.local) from [`frontend/.env.local.example`](/Users/akashkushwaha/Projects/money-mgmt/frontend/.env.local.example)

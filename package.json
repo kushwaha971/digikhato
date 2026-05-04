@@ -1,0 +1,12 @@
+{
+  "name": "money-mgmt-monorepo",
+  "private": true,
+  "scripts": {
+    "railway:build:frontend": "npm --prefix frontend ci && npm --prefix frontend run build",
+    "railway:start:frontend": "npm --prefix frontend run start -- -H 0.0.0.0 -p ${PORT:-3000}",
+    "railway:build:backend": "python -m pip install -r backend/requirements.txt",
+    "railway:start:backend": "cd backend && ./start.sh",
+    "build": "npm run railway:build:frontend",
+    "start": "npm run railway:start:frontend"
+  }
+}
