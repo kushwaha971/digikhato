@@ -4,21 +4,18 @@ import { PropsWithChildren, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { useGetMeQuery } from "@/features/auth/auth-api";
-import { ROUTES } from "@/lib/routes";
-import { clearAuth, setAccessToken, setCurrentUser, type UserRole } from "@/store/auth-slice";
+import { getModuleLandingRoute, ROUTES } from "@/lib/routes";
+import { clearAuth, resolveDefaultModule, setAccessToken, setCurrentUser, type AuthUser } from "@/store/auth-slice";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 
 const PUBLIC_ROUTES = new Set<string>([ROUTES.public.home, ROUTES.public.login, ROUTES.public.signup]);
 
-function resolveAuthenticatedRedirect(role: UserRole): string {
-  switch (role) {
-    case "super_admin":
-      return ROUTES.app.superAdmin.dashboard;
-    case "borrower":
-      return ROUTES.app.portal;
-    default:
-      return ROUTES.app.udhaarbook.root;
-  }
+function resolveAuthenticatedRedirect(user: AuthUser): string {
+  if (user.role === "super_admin") return ROUTES.app.superAdmin.dashboard;
+
+  const defaultModule = resolveDefaultModule(user);
+  if (!defaultModule) return ROUTES.app.moduleAccess;
+  return getModuleLandingRoute(defaultModule);
 }
 
 export function AuthBootstrap({ children }: PropsWithChildren) {
@@ -89,7 +86,7 @@ export function AuthBootstrap({ children }: PropsWithChildren) {
       return;
     }
 
-    router.replace(resolveAuthenticatedRedirect(effectiveUser.role));
+    router.replace(resolveAuthenticatedRedirect(effectiveUser));
   }, [accessToken, currentUser, isPublicRoute, me, router]);
 
   return <>{children}</>;

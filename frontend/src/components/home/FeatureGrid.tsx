@@ -37,6 +37,12 @@ const features: Feature[] = [
     href: "/notes-app",
   },
   {
+    icon: "💎",
+    title: "Jewellery ERP",
+    tagline: "Billing, inventory, karigar operations, and gold pledge workflows in one vertical module.",
+    comingSoon: true,
+  },
+  {
     icon: "🪑",
     title: "Library Seat Management",
     tagline: "Shift bookings, fee collection, and student attendance — all in one place.",
@@ -65,11 +71,13 @@ export function FeatureGrid() {
                   : "hover:shadow-lg group-hover:border-primary-200 dark:group-hover:border-primary-800"
               }`}
             >
-              {comingSoon && (
-                <span className="absolute top-3 right-3 px-2 py-0.5 rounded-full text-[10px] font-bold bg-neutral-200 dark:bg-neutral-700 text-muted uppercase tracking-wide">
-                  Coming Soon
-                </span>
-              )}
+              <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                {comingSoon && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-neutral-200 dark:bg-neutral-700 text-muted uppercase tracking-wide">
+                    Coming Soon
+                  </span>
+                )}
+              </div>
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-2xl shadow-sm flex-shrink-0">
                 {icon}
               </div>
@@ -124,7 +132,7 @@ export function FeatureGrid() {
             </div>
             <h3 className="text-lg font-bold text-text mb-2">{comingSoonTitle}</h3>
             <p className="text-sm text-muted mb-6">
-              This module is under development and will be available soon. Stay tuned for the launch!
+              This module is listed in the SaaS roadmap and will be activated in a later phase.
             </p>
             <button
               type="button"

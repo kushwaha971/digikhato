@@ -9,6 +9,23 @@ export interface CreateTeamMemberRequest {
   branch_name?: string;
 }
 
+export interface ModuleTeamRole {
+  id: number;
+  module: string;
+  role_code: string;
+  branch_name: string;
+  is_active: boolean;
+  user?: AuthUser;
+  granted_by?: number | null;
+}
+
+export interface AssignModuleRoleRequest {
+  module: string;
+  user_id: number;
+  role_code: string;
+  branch_name?: string;
+}
+
 export const teamApi = api.injectEndpoints({
   endpoints: (builder) => ({
     getTeamMembers: builder.query<AuthUser[], void>({
@@ -36,6 +53,25 @@ export const teamApi = api.injectEndpoints({
       query: (id) => ({ url: `users/team/${id}/toggle-status/`, method: "POST" }),
       invalidatesTags: ["Team"],
     }),
+    getModuleTeamRoles: builder.query<ModuleTeamRole[], string>({
+      query: (module) => ({ url: `users/modules/${module}/team-roles/` }),
+      providesTags: ["Team"],
+    }),
+    assignModuleTeamRole: builder.mutation<ModuleTeamRole, AssignModuleRoleRequest>({
+      query: ({ module, ...data }) => ({
+        url: `users/modules/${module}/team-roles/`,
+        method: "POST",
+        data,
+      }),
+      invalidatesTags: ["Team", "Auth"],
+    }),
+    revokeModuleTeamRole: builder.mutation<void, { module: string; roleId: number }>({
+      query: ({ module, roleId }) => ({
+        url: `users/modules/${module}/team-roles/${roleId}/`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["Team", "Auth"],
+    }),
   }),
 });
 
@@ -45,4 +81,7 @@ export const {
   useUpdateTeamMemberMutation,
   useDeleteTeamMemberMutation,
   useToggleTeamMemberStatusMutation,
+  useGetModuleTeamRolesQuery,
+  useAssignModuleTeamRoleMutation,
+  useRevokeModuleTeamRoleMutation,
 } = teamApi;

@@ -2,24 +2,28 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { BrandLogo } from "@/components/branding/BrandLogo";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useLogoutMutation } from "@/features/auth/auth-api";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
-import { getModuleContext, MODULE_META } from "@/lib/moduleNav";
+import { getModuleContext, getModuleLabel } from "@/lib/moduleNav";
 import { ROUTES } from "@/lib/routes";
 import { clearAuth } from "@/store/auth-slice";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
   BORROWER_NAV,
+  JEWELLERY_FEATURE_SECTIONS,
   LEDGER_MODULE_NAV,
-  MAIN_NAV,
-  NOTES_MODULE_NAV,
   LOAN_MODULE_NAV,
+  MODULE_LIST_NAV,
+  MODULE_SWITCH_NAV,
+  NOTES_MODULE_NAV,
   SETTINGS_NAV,
   SUPER_ADMIN_NAV,
+  buildCanSeeItem,
+  isPathActive,
 } from "@/components/layout/Sidebar";
 
 type MobileNavDrawerProps = Readonly<{
@@ -29,14 +33,19 @@ type MobileNavDrawerProps = Readonly<{
 
 export function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const dispatch = useAppDispatch();
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
   const { can, isSuperAdmin, isBorrower } = useRoleAccess();
   const currentUser = useAppSelector((state) => state.auth.currentUser);
   const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
-  const moduleCtx = getModuleContext(pathname);
-  const showModuleContext = Boolean(moduleCtx) && !isSuperAdmin && !isBorrower;
+  const [expandedJewelleryGroups, setExpandedJewelleryGroups] = useState<Record<string, boolean>>({});
+  const [expandedAppGroups, setExpandedAppGroups] = useState<Record<string, boolean>>({});
+  const currentRoute = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
+  const moduleRoles = currentUser?.module_roles ?? [];
+  const canSeeItem = buildCanSeeItem(moduleRoles, can);
+  const moduleContext = getModuleContext(pathname);
 
   const [mounted, setMounted] = useState(false);
   const [visible, setVisible] = useState(false);
@@ -55,25 +64,55 @@ export function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps) {
     }
   }, [open]);
 
-  let primaryNav = MAIN_NAV;
-  if (isSuperAdmin) primaryNav = SUPER_ADMIN_NAV;
-  else if (isBorrower) primaryNav = BORROWER_NAV;
-  const visibleItems = primaryNav.filter((item) => can(item.permission));
-  const moduleItems = (() => {
-    if (!showModuleContext) return [];
-    if (moduleCtx === "loans") return LOAN_MODULE_NAV.filter((item) => can(item.permission));
-    if (moduleCtx === "ledger") return LEDGER_MODULE_NAV.filter((item) => can(item.permission));
-    if (moduleCtx === "notes") return NOTES_MODULE_NAV.filter((item) => can(item.permission));
-    return [];
-  })();
+  const visibleItems = isSuperAdmin
+    ? SUPER_ADMIN_NAV.filter(canSeeItem)
+    : isBorrower
+      ? BORROWER_NAV.filter(canSeeItem)
+      : moduleContext === "loans"
+        ? LOAN_MODULE_NAV.filter(canSeeItem)
+        : moduleContext === "ledger"
+          ? LEDGER_MODULE_NAV.filter(canSeeItem)
+          : moduleContext === "notes"
+            ? NOTES_MODULE_NAV.filter(canSeeItem)
+            : [];
+  const visibleAppsTools = [
+    NOTES_MODULE_NAV[0],
+    MODULE_SWITCH_NAV,
+  ].filter(canSeeItem);
+  const visibleModuleList = MODULE_LIST_NAV.filter(canSeeItem);
 
-  const isActive = (href: string) =>
-    pathname === href || (href !== "/" && pathname.startsWith(href + "/"));
+  const isActive = (href: string) => {
+    return isPathActive(currentRoute, href);
+  };
+  const inJewelleryModule = moduleContext === "jewellery" && !isSuperAdmin && !isBorrower;
+  const visibleJewellerySections = JEWELLERY_FEATURE_SECTIONS.map((section) => ({
+    ...section,
+    items: section.items.filter(canSeeItem),
+  })).filter((section) => section.items.length > 0);
+
+  useEffect(() => {
+    if (!inJewelleryModule) return;
+    setExpandedJewelleryGroups((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const section of visibleJewellerySections) {
+        for (const item of section.items) {
+          const children = item.children ?? [];
+          const shouldExpand = isActive(item.href) || children.some((child) => isActive(child.href));
+          if (shouldExpand && !next[item.href]) {
+            next[item.href] = true;
+            changed = true;
+          }
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [currentRoute, inJewelleryModule, visibleJewellerySections]);
   const homeHref = isSuperAdmin
     ? ROUTES.app.superAdmin.dashboard
     : isBorrower
       ? ROUTES.app.portal
-      : ROUTES.app.loans.dashboard;
+      : ROUTES.app.modules;
 
   const handleLogout = async () => {
     try {
@@ -136,44 +175,197 @@ export function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps) {
         </div>
 
         <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-          {/* Module items FIRST */}
-          {showModuleContext && moduleItems.length > 0 ? (
+          {inJewelleryModule ? (
+            visibleJewellerySections.map((section, sectionIndex) => (
+              <div key={`${section.title}-${sectionIndex}`} className="space-y-1">
+                {section.items.map((item) => {
+                  const children = item.children ?? [];
+                  const expanded = expandedJewelleryGroups[item.href] ?? false;
+                  const childIsActive = children.some((child) => isActive(child.href));
+                  const groupIsActive = isActive(item.href) || childIsActive;
+                  return (
+                    <div key={item.href} className="space-y-1">
+                      <div className={navLinkClass(groupIsActive)}>
+                        <Link
+                          href={item.href}
+                          onClick={(event) => {
+                            if (children.length > 0) {
+                              event.preventDefault();
+                              setExpandedJewelleryGroups((prev) => ({
+                                ...prev,
+                                [item.href]: !(prev[item.href] ?? false),
+                              }));
+                              return;
+                            }
+                            onClose();
+                          }}
+                          className="flex-1 flex items-center gap-3 min-w-0"
+                        >
+                          <span className="text-primary-500">{item.icon}</span>
+                          <span className="text-sm truncate">{item.label}</span>
+                        </Link>
+                        {children.length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExpandedJewelleryGroups((prev) => ({
+                                ...prev,
+                                [item.href]: !(prev[item.href] ?? false),
+                              }))
+                            }
+                            className="px-1 py-1 text-muted hover:text-text transition-colors"
+                            aria-label={expanded ? `Collapse ${item.label}` : `Expand ${item.label}`}
+                            aria-expanded={expanded}
+                          >
+                            <svg
+                              className={`w-4 h-4 transition-transform duration-150 ${expanded ? "rotate-180" : ""}`}
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              strokeWidth={2}
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+                        ) : null}
+                      </div>
+                      {expanded && children.length > 0 ? (
+                        <div className="ml-6 border-l border-border pl-2 space-y-0.5">
+                          {children.map((child) => (
+                            <Link
+                              key={`${item.href}-${child.label}`}
+                              href={child.href}
+                              onClick={onClose}
+                              className={[
+                                "flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors",
+                                isActive(child.href)
+                                  ? "text-[var(--sidebar-active-text)] font-medium"
+                                  : "text-muted hover:text-text",
+                              ].join(" ")}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
+                              <span className="truncate">{child.label}</span>
+                            </Link>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ))
+          ) : (
             <>
               <p className="px-3 pt-1 pb-0.5 text-[10px] font-bold uppercase tracking-widest text-muted">
-                {MODULE_META[moduleCtx!].label}
+                {isSuperAdmin ? "Apps" : isBorrower ? "My Loans" : getModuleLabel(moduleContext)}
               </p>
-              {moduleItems.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={onClose}
-                  className={navLinkClass(isActive(item.href))}
-                >
-                  <span className="text-primary-500">{item.icon}</span>
-                  <span className="text-sm">{item.label}</span>
-                </Link>
-              ))}
-              <div className="my-2 border-t border-border" />
+              {visibleItems.map((item) => {
+                const groupIsActive = isActive(item.href);
+                return (
+                  <div key={item.href} className="space-y-1">
+                    <div className={navLinkClass(groupIsActive)}>
+                      <Link
+                        href={item.href}
+                        onClick={onClose}
+                        className="flex-1 flex items-center gap-3 min-w-0"
+                      >
+                        <span className="text-primary-500">{item.icon}</span>
+                        <span className="text-sm truncate">{item.label}</span>
+                      </Link>
+                    </div>
+                  </div>
+                );
+              })}
+
             </>
+          )}
+
+          {!isSuperAdmin && !isBorrower && moduleContext ? (
+            <div className="mt-3 pt-3 border-t border-border/70 space-y-1">
+              <p className="px-3 pt-1 pb-0.5 text-[10px] font-bold uppercase tracking-widest text-muted">
+                Apps
+              </p>
+              {visibleAppsTools.map((item) => {
+                if (item.href !== MODULE_SWITCH_NAV.href) {
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={onClose}
+                      className={navLinkClass(isActive(item.href))}
+                    >
+                      <span className="text-primary-500">{item.icon}</span>
+                      <span className="text-sm">{item.label}</span>
+                    </Link>
+                  );
+                }
+
+                const expanded = expandedAppGroups[item.href] ?? false;
+                const childIsActive = visibleModuleList.some((subItem) => isActive(subItem.href));
+                const groupIsActive = isActive(item.href) || childIsActive;
+
+                return (
+                  <div key={item.href} className="space-y-1">
+                    <div className={navLinkClass(groupIsActive)}>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedAppGroups((prev) => ({
+                            ...prev,
+                            [item.href]: !(prev[item.href] ?? false),
+                          }))
+                        }
+                        className="flex-1 flex items-center gap-3 min-w-0 text-left"
+                      >
+                        <span className="text-primary-500">{item.icon}</span>
+                        <span className="text-sm truncate">{item.label}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedAppGroups((prev) => ({
+                            ...prev,
+                            [item.href]: !(prev[item.href] ?? false),
+                          }))
+                        }
+                        className="px-1 py-1 text-muted hover:text-text transition-colors"
+                        aria-label={expanded ? "Collapse modules" : "Expand modules"}
+                        aria-expanded={expanded}
+                      >
+                        <svg
+                          className={`w-4 h-4 transition-transform duration-150 ${expanded ? "rotate-180" : ""}`}
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    {expanded ? (
+                      <div className="ml-4 border-l border-border pl-2 space-y-1">
+                        {visibleModuleList.map((subItem) => (
+                          <Link
+                            key={subItem.href}
+                            href={subItem.href}
+                            onClick={onClose}
+                            className={navLinkClass(isActive(subItem.href))}
+                          >
+                            <span className="text-primary-500">{subItem.icon}</span>
+                            <span className="text-sm">{subItem.label}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
           ) : null}
 
-          {/* Apps BELOW */}
-          <p className="px-3 pt-1 pb-0.5 text-[10px] font-bold uppercase tracking-widest text-muted">
-            Apps
-          </p>
-          {visibleItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onClose}
-              className={navLinkClass(isActive(item.href))}
-            >
-              <span className="text-primary-500">{item.icon}</span>
-              <span className="text-sm">{item.label}</span>
-            </Link>
-          ))}
-
-          {can(SETTINGS_NAV.permission) ? (
+          {canSeeItem(SETTINGS_NAV) ? (
             <Link
               href={SETTINGS_NAV.href}
               onClick={onClose}

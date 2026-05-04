@@ -7,14 +7,14 @@ import { Button } from "@/components/ui/Button";
 import { BrandLogo } from "@/components/branding/BrandLogo";
 
 export const metadata: Metadata = {
-  title: "DigiKhaato — Business Management Software for Loans, Ledgers & Memberships",
-  description: "One dashboard for your loan portfolio, customer ledger, daily collections, library seats, and gym memberships. Built for decision-makers who need real-time control.",
+  title: "DigiKhaato — Modular SaaS for Loans, Ledger, Notes & Vertical Apps",
+  description: "DigiKhaato is a modular SaaS platform with included apps (UdhaarBook, Notes) and activation-based apps (Loans, Jewellery, more). Built on Django + Postgres with external integrations added in later phases.",
   keywords: ["loan management software", "customer ledger app", "daily collection app", "library seat management", "gym membership software", "udhar book app"],
   openGraph: {
     type: "website",
     siteName: "DigiKhaato",
-    title: "DigiKhaato — The Command Centre for Your Business",
-    description: "Loans, collections, ledgers, memberships — one platform, zero spreadsheets.",
+    title: "DigiKhaato — Modular Business Operations Platform",
+    description: "Included apps for everyone, advanced apps by workspace activation. One login, one system, no spreadsheet chaos.",
   },
 };
 
@@ -35,18 +35,16 @@ export default function HomePage() {
             <div className="flex-1 min-w-0 lg:max-w-[46%] py-6">
               <div className="mb-5">
                 <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400">
-                  The command centre your business needs
+                  Modular SaaS for growing businesses
                 </span>
               </div>
               <h1 className="text-4xl sm:text-5xl lg:text-5xl xl:text-6xl font-bold text-text leading-tight mb-5">
-                Who owes you.{" "}
-                <span className="text-primary-500">Who you owe.</span>{" "}
-                All in one place.
+                Included apps for everyone.{" "}
+                <span className="text-primary-500">Advanced apps when you need them.</span>
               </h1>
               <p className="text-base sm:text-lg text-muted mb-8 leading-relaxed">
-                DigiKhaato gives shopkeepers, traders, and finance managers
-                real-time control over their udhar book, loan portfolio, and daily collections
-                — on mobile and desktop, without any spreadsheets.
+                Run UdhaarBook and Notes from day one, then activate domain modules like Loans and Jewellery per workspace.
+                Current stack is Django + Postgres first; external integrations are phased later.
               </p>
               <div className="flex flex-col sm:flex-row gap-3 mb-5">
                 <Link href="/signup">
@@ -57,15 +55,15 @@ export default function HomePage() {
                 </Link>
               </div>
               <p className="text-xs text-muted">
-                Mobile number only. No password. No download. Up in 10 seconds.
+                Mobile-first onboarding, web-first operations, and feature activation controls built in.
               </p>
 
               {/* Social proof strip */}
               <div className="mt-8 flex flex-wrap gap-6">
                 {[
-                  { stat: "Zero paper", label: "Every transaction is digital" },
-                  { stat: "One login", label: "All modules, one account" },
-                  { stat: "Real-time", label: "Balances update instantly" },
+                  { stat: "Included + Advanced", label: "Common apps included, advanced modules activatable" },
+                  { stat: "One login", label: "All modules under a single workspace account" },
+                  { stat: "Django + Postgres", label: "No external dependency required to start" },
                 ].map(({ stat, label }) => (
                   <div key={stat} className="flex flex-col">
                     <span className="text-sm font-bold text-primary-500">{stat}</span>
@@ -107,7 +105,7 @@ export default function HomePage() {
               Everything your business needs
             </h2>
             <p className="text-sm text-muted max-w-lg">
-              Six purpose-built modules, one login. Click any module to see what it can do.
+              Start with core apps and activate add-ons as your operations expand.
             </p>
           </div>
 
@@ -121,9 +119,9 @@ export default function HomePage() {
         <div className="w-full px-6 sm:px-10 md:px-14 lg:px-20">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center">
             {[
-              { stat: "Zero paper", label: "Every transaction is digital, searchable, and permanent." },
-              { stat: "One login", label: "All six modules under a single account and team." },
-              { stat: "Real-time", label: "Reports and balances update the moment a payment lands." },
+              { stat: "Modular Access", label: "Included modules are always available; advanced modules are controlled per workspace." },
+              { stat: "Single Workspace", label: "Users switch apps without separate logins or disconnected tools." },
+              { stat: "Phased Integrations", label: "Run now on Django + Postgres, add external connectors later." },
             ].map(({ stat, label }) => (
               <div key={stat} className="flex flex-col gap-2">
                 <p className="text-xl font-bold text-primary-500">{stat}</p>
@@ -139,7 +137,7 @@ export default function HomePage() {
         <div className="w-full px-6 sm:px-10 md:px-14 lg:px-20 text-center">
           <h2 className="text-2xl font-bold text-text mb-3">Ready to take control?</h2>
           <p className="text-sm text-muted mb-6">
-            Sign up free. Add your first borrower or customer in under a minute.
+            Set up your workspace, use core apps immediately, and activate advanced modules when required.
           </p>
           <Link href="/signup">
             <Button size="lg" fullWidth={false}>Get Started Free →</Button>

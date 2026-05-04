@@ -3,12 +3,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useRoleAccess, type Permission } from "@/hooks/useRoleAccess";
+import { buildCanSeeItem, type ModuleFeatureGate } from "@/components/layout/Sidebar";
+import { getModuleContext } from "@/lib/moduleNav";
+import { useAppSelector } from "@/store/hooks";
 import { ROUTES } from "@/lib/routes";
 
 interface Tab {
   readonly href: string;
   readonly label: string;
   readonly permission: Permission;
+  readonly moduleFeature?: ModuleFeatureGate;
   readonly icon: React.ReactNode;
   readonly alwaysVisible?: boolean;
 }
@@ -34,7 +38,35 @@ const SettingsIcon = (
 
 const MAIN_TABS: Tab[] = [
   { href: ROUTES.app.modules, label: "Home", permission: "view:modules", icon: HomeIcon, alwaysVisible: true },
-  { href: ROUTES.app.notes.root, label: "Notes", permission: "view:notes", icon: NotesIcon },
+  { href: ROUTES.app.settings, label: "Settings", permission: "view:settings", icon: SettingsIcon },
+];
+
+const LOANS_TABS: Tab[] = [
+  { href: ROUTES.app.loans.dashboard, label: "Home", permission: "view:dashboard", moduleFeature: { module: "loans", feature: "dashboard" }, icon: HomeIcon, alwaysVisible: true },
+  { href: ROUTES.app.loans.borrowers, label: "Borrowers", permission: "view:borrowers", moduleFeature: { module: "loans", feature: "borrowers" }, icon: NotesIcon },
+  { href: ROUTES.app.loans.collections, label: "Collections", permission: "add:collection", moduleFeature: { module: "loans", feature: "collections" }, icon: NotesIcon },
+  { href: ROUTES.app.modules, label: "Modules", permission: "view:modules", icon: HomeIcon },
+  { href: ROUTES.app.settings, label: "Settings", permission: "view:settings", icon: SettingsIcon },
+];
+
+const LEDGER_TABS: Tab[] = [
+  { href: ROUTES.app.udhaarbook.root, label: "Home", permission: "view:customer-ledger", icon: HomeIcon, alwaysVisible: true },
+  { href: ROUTES.app.modules, label: "Modules", permission: "view:modules", icon: HomeIcon },
+  { href: ROUTES.app.settings, label: "Settings", permission: "view:settings", icon: SettingsIcon },
+];
+
+const NOTES_TABS: Tab[] = [
+  { href: ROUTES.app.notes.root, label: "Home", permission: "view:notes", icon: HomeIcon, alwaysVisible: true },
+  { href: ROUTES.app.notes.new, label: "New", permission: "view:notes", icon: NotesIcon },
+  { href: ROUTES.app.modules, label: "Modules", permission: "view:modules", icon: HomeIcon },
+  { href: ROUTES.app.settings, label: "Settings", permission: "view:settings", icon: SettingsIcon },
+];
+
+const JEWELLERY_TABS: Tab[] = [
+  { href: ROUTES.app.jewellery.dashboard, label: "Home", permission: "view:modules", moduleFeature: { module: "jewellery", feature: "dashboard" }, icon: HomeIcon, alwaysVisible: true },
+  { href: ROUTES.app.jewellery.billing, label: "Billing", permission: "view:modules", moduleFeature: { module: "jewellery", feature: "billing" }, icon: NotesIcon },
+  { href: ROUTES.app.jewellery.inventory, label: "Stock", permission: "view:modules", moduleFeature: { module: "jewellery", feature: "inventory" }, icon: NotesIcon },
+  { href: ROUTES.app.modules, label: "Modules", permission: "view:modules", icon: HomeIcon },
   { href: ROUTES.app.settings, label: "Settings", permission: "view:settings", icon: SettingsIcon },
 ];
 
@@ -81,11 +113,15 @@ const SUPER_ADMIN_TABS: Tab[] = [
 
 export function BottomNav() {
   const path = usePathname();
+  const moduleContext = getModuleContext(path);
   const { can, isBorrower, isSuperAdmin } = useRoleAccess();
+  const currentUser = useAppSelector((state) => state.auth.currentUser);
+  const moduleRoles = currentUser?.module_roles ?? [];
+  const canSeeItem = buildCanSeeItem(moduleRoles, can);
   const resolveTabs = (items: Tab[]) => {
     const [home, ...rest] = items;
     const visibleHome = home ? [home] : [];
-    const visibleRest = rest.filter((tab) => tab.alwaysVisible || can(tab.permission));
+    const visibleRest = rest.filter((tab) => tab.alwaysVisible || canSeeItem(tab));
     return [...visibleHome, ...visibleRest];
   };
 
@@ -99,7 +135,17 @@ export function BottomNav() {
     return <BottomBar tabs={tabs} path={path} />;
   }
 
-  const tabs = resolveTabs(MAIN_TABS);
+  const baseTabs =
+    moduleContext === "loans"
+      ? LOANS_TABS
+      : moduleContext === "ledger"
+        ? LEDGER_TABS
+        : moduleContext === "notes"
+          ? NOTES_TABS
+          : moduleContext === "jewellery"
+            ? JEWELLERY_TABS
+            : MAIN_TABS;
+  const tabs = resolveTabs(baseTabs);
   return <BottomBar tabs={tabs} path={path} />;
 }
 

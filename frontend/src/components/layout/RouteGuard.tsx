@@ -1,14 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import { ForceResetPasswordFormModal } from "@/components/auth/ForceResetPasswordFormModal";
 import { ForceResetPasswordModal } from "@/components/auth/ForceResetPasswordModal";
 import { useChangePasswordMutation, useGetMeQuery } from "@/features/auth/auth-api";
 import { type AppRole } from "@/hooks/useRoleAccess";
-import { ROUTES } from "@/lib/routes";
-import { setAccessToken, setCurrentUser } from "@/store/auth-slice";
+import { getModuleFromPath, getModuleLandingRoute, ROUTES } from "@/lib/routes";
+import { getAccessibleModules, resolveDefaultModule, setAccessToken, setCurrentUser, type AuthUser } from "@/store/auth-slice";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 
 interface RouteGuardProps {
@@ -17,18 +17,19 @@ interface RouteGuardProps {
   readonly redirectTo?: string;
 }
 
-function getDefaultRedirect(role: AppRole): string {
-  switch (role) {
-    case "super_admin":
-      return ROUTES.app.superAdmin.dashboard;
-    case "borrower":
-      return ROUTES.app.portal;
-    default:
-      return ROUTES.app.udhaarbook.root;
-  }
+function getResetPromptDismissKey(userId: number): string {
+  return `reset_prompt_dismissed:${userId}`;
+}
+
+function getDefaultRedirect(user: AuthUser): string {
+  if (user.role === "super_admin") return ROUTES.app.superAdmin.dashboard;
+  const defaultModule = resolveDefaultModule(user);
+  if (!defaultModule) return ROUTES.app.moduleAccess;
+  return getModuleLandingRoute(defaultModule);
 }
 
 export function RouteGuard({ children, requiredRoles, redirectTo }: RouteGuardProps) {
+  const pathname = usePathname();
   const router = useRouter();
   const dispatch = useAppDispatch();
   const { accessToken, currentUser } = useAppSelector((state) => state.auth);
@@ -87,10 +88,41 @@ export function RouteGuard({ children, requiredRoles, redirectTo }: RouteGuardPr
       return;
     }
 
-    if (requiredRoles && currentUser && !requiredRoles.includes(currentUser.role as AppRole)) {
-      router.replace(redirectTo ?? getDefaultRedirect(currentUser.role as AppRole));
+    if (!currentUser) {
+      return;
     }
-  }, [isHydrated, effectiveToken, currentUser, requiredRoles, router, redirectTo]);
+
+    if (requiredRoles && !requiredRoles.includes(currentUser.role as AppRole)) {
+      router.replace(redirectTo ?? getDefaultRedirect(currentUser));
+      return;
+    }
+
+    if (currentUser.role === "super_admin") {
+      if (pathname === ROUTES.app.moduleAccess) {
+        router.replace(ROUTES.app.superAdmin.dashboard);
+      }
+      return;
+    }
+
+    const accessibleModules = getAccessibleModules(currentUser);
+    if (accessibleModules.length === 0) {
+      if (pathname !== ROUTES.app.moduleAccess) {
+        router.replace(ROUTES.app.moduleAccess);
+      }
+      return;
+    }
+
+    const defaultRedirect = getDefaultRedirect(currentUser);
+    if (pathname === ROUTES.app.moduleAccess) {
+      router.replace(defaultRedirect);
+      return;
+    }
+
+    const routeModule = getModuleFromPath(pathname);
+    if (routeModule && !accessibleModules.includes(routeModule)) {
+      router.replace(defaultRedirect);
+    }
+  }, [isHydrated, effectiveToken, currentUser, requiredRoles, router, redirectTo, pathname]);
 
   const shouldForcePasswordReset = useMemo(() => {
     return Boolean(currentUser?.must_reset_password);
@@ -98,15 +130,29 @@ export function RouteGuard({ children, requiredRoles, redirectTo }: RouteGuardPr
 
   useEffect(() => {
     if (!shouldForcePasswordReset) {
+      if (typeof window !== "undefined" && currentUser?.id) {
+        window.localStorage.removeItem(getResetPromptDismissKey(currentUser.id));
+      }
       setIsResetFormOpen(false);
       setIsResetPromptDismissed(false);
+      return;
     }
-  }, [shouldForcePasswordReset]);
+
+    if (typeof window === "undefined" || !currentUser?.id) {
+      return;
+    }
+
+    const dismissed = window.localStorage.getItem(getResetPromptDismissKey(currentUser.id)) === "1";
+    setIsResetPromptDismissed(dismissed);
+  }, [shouldForcePasswordReset, currentUser?.id]);
 
   const handleResetPromptCancel = useCallback(() => {
+    if (typeof window !== "undefined" && currentUser?.id) {
+      window.localStorage.setItem(getResetPromptDismissKey(currentUser.id), "1");
+    }
     setIsResetPromptDismissed(true);
     setIsResetFormOpen(false);
-  }, []);
+  }, [currentUser?.id]);
 
   const handleResetNow = useCallback(() => {
     setIsResetFormOpen(true);
@@ -116,6 +162,9 @@ export function RouteGuard({ children, requiredRoles, redirectTo }: RouteGuardPr
     values: { old_password: string; new_password: string },
   ) => {
     await changePassword(values).unwrap();
+    if (typeof window !== "undefined" && currentUser?.id) {
+      window.localStorage.removeItem(getResetPromptDismissKey(currentUser.id));
+    }
     if (currentUser) {
       dispatch(setCurrentUser({ ...currentUser, must_reset_password: false }));
     }
@@ -130,7 +179,7 @@ export function RouteGuard({ children, requiredRoles, redirectTo }: RouteGuardPr
     return null;
   }
 
-  if (requiredRoles && !currentUser) {
+  if (!currentUser) {
     return null;
   }
 

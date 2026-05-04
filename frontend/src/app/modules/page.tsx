@@ -1,108 +1,182 @@
 "use client";
-import { useRoleAccess, useFeatureFlag } from "@/hooks/useRoleAccess";
+
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ROUTES } from "@/lib/routes";
+
+import { Screen } from "@/components/layout/Screen";
+import { Button } from "@/components/ui/Button";
+import { useActivateModuleMutation, useRequestModuleAccessMutation } from "@/features/auth/auth-api";
+import { APP_MODULES, getModuleLandingRoute, type AppModuleCode } from "@/lib/routes";
+import { getAccessibleModules, isModuleAdmin } from "@/store/auth-slice";
+import { useAppSelector } from "@/store/hooks";
 
 interface ModuleCard {
-  key: string;
+  key: AppModuleCode;
   label: string;
   description: string;
   icon: string;
-  href: string;
-  /** If set, only render when feature_flags[featureFlag] === true */
-  featureFlag?: string;
-  /** Minimum platform role required to see this card */
-  requiredRole?: "admin" | "collector" | "borrower";
   color: string;
 }
 
 const ALL_MODULES: ModuleCard[] = [
   {
+    key: "udhaar",
+    label: "UdhaarBook",
+    description: "Customer ledger, parties, and day-to-day credit tracking",
+    icon: "📒",
+    color: "#4F46E5",
+  },
+  {
     key: "loans",
     label: "Loan Management",
-    description: "Borrowers, loans, daily collections, overdue tracking",
+    description: "Borrowers, loans, daily collections, and overdue tracking",
     icon: "₹",
-    href: ROUTES.app.loans.dashboard,
     color: "#185FA5",
   },
   {
-    key: "customer-ledger",
-    label: "Udhaar Book",
-    description: "Customer credit, digital khata, payment reminders",
-    icon: "📒",
-    href: "/customer-ledger",
-    color: "#0F6E56",
-  },
-  {
-    key: "notes",
-    label: "Notes",
-    description: "Quick notes and reminders for your business",
-    icon: "📝",
-    href: "/notes",
-    color: "#854F0B",
-  },
-  {
     key: "jewellery",
-    label: "Jewellery ERP",
-    description: "Billing, inventory, karigar, gold pledge loans, GST reports",
+    label: "Jewellery ERP (JWL)",
+    description: "Billing, inventory, karigar, pledge, and compliance workflows",
     icon: "💎",
-    href: "/jewellery",
-    featureFlag: "jewellery",
-    requiredRole: "admin",
     color: "#C49A22",
   },
 ];
 
+function normalizePolicyModules(values: string[] | undefined): AppModuleCode[] {
+  if (!Array.isArray(values)) return [];
+  const valid = values.filter((value): value is AppModuleCode => (APP_MODULES as readonly string[]).includes(value));
+  return Array.from(new Set(valid));
+}
+
+function canSelfOnboardFromModuleAdmin(
+  moduleAdmin: unknown,
+  module: AppModuleCode,
+): boolean {
+  if (!moduleAdmin || typeof moduleAdmin !== "object" || Array.isArray(moduleAdmin)) return false;
+  const entry = (moduleAdmin as Record<string, unknown>)[module];
+  if (!entry || typeof entry !== "object") return false;
+  return (entry as { can_self_onboard?: boolean }).can_self_onboard === true;
+}
+
 export default function ModulesPage() {
   const router = useRouter();
-  const { isAdmin } = useRoleAccess();
-  const jewelleryEnabled = useFeatureFlag("jewellery");
+  const currentUser = useAppSelector((state) => state.auth.currentUser);
+  const [activateModule, { isLoading: isActivating }] = useActivateModuleMutation();
+  const [requestModuleAccess, { isLoading: isRequesting }] = useRequestModuleAccessMutation();
+  const [pendingModuleKey, setPendingModuleKey] = useState<AppModuleCode | null>(null);
 
-  const visibleModules = ALL_MODULES.filter((m) => {
-    if (m.featureFlag === "jewellery" && !jewelleryEnabled) return false;
-    if (m.requiredRole === "admin" && !isAdmin) return false;
-    return true;
-  });
+  const accessibleModules = useMemo(() => getAccessibleModules(currentUser), [currentUser]);
+
+  const policy = currentUser?.module_access_policy;
+  const requestableModules = normalizePolicyModules(policy?.requestable_modules);
+  const selfOnboardableModules = normalizePolicyModules(policy?.self_onboardable_modules);
+  const allowRequestAccess = policy?.allow_request_access !== false;
+  const allowSelfOnboard = policy?.allow_self_onboard === true;
+
+  const handleOpenModule = async (module: ModuleCard) => {
+    setPendingModuleKey(module.key);
+    try {
+      await activateModule({ module: module.key }).unwrap();
+    } catch {
+      // Keep navigation non-blocking if activation endpoint is not required for this module.
+    } finally {
+      setPendingModuleKey(null);
+    }
+    router.push(getModuleLandingRoute(module.key));
+  };
+
+  const handleRequestAccess = async (module: ModuleCard, mode: "request" | "self_onboard") => {
+    setPendingModuleKey(module.key);
+    try {
+      await requestModuleAccess({ module: module.key, mode }).unwrap();
+    } finally {
+      setPendingModuleKey(null);
+    }
+  };
 
   return (
-    <div className="p-6 max-w-2xl mx-auto">
-      <h1 className="text-xl font-semibold text-[var(--color-text-primary)] mb-1">Modules</h1>
-      <p className="text-sm text-[var(--color-text-secondary)] mb-6">
-        Select a module to get started
-      </p>
+    <Screen title="Modules" subtitle="Access modules based on your assigned roles and permissions">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+        {ALL_MODULES.map((module) => {
+          const hasAccess = accessibleModules.includes(module.key);
+          const isPending = pendingModuleKey === module.key;
+          const isModuleAdminUser = hasAccess && isModuleAdmin(currentUser, module.key);
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {visibleModules.map((mod) => (
-          <button
-            key={mod.key}
-            onClick={() => router.push(mod.href)}
-            className="flex items-start gap-4 p-4 rounded-xl border border-[var(--color-border-tertiary)]
-                       bg-[var(--color-background-secondary)] hover:bg-[var(--color-background-primary)]
-                       text-left transition-colors w-full"
-          >
-            <span
-              className="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center text-lg font-medium"
-              style={{ background: `${mod.color}18`, color: mod.color }}
+          const canRequest = !hasAccess && allowRequestAccess && (
+            requestableModules.length === 0 || requestableModules.includes(module.key)
+          );
+          const canSelfOnboardByPolicy = allowSelfOnboard && selfOnboardableModules.includes(module.key);
+          const canSelfOnboardByBackend = canSelfOnboardFromModuleAdmin(currentUser?.module_admin, module.key);
+          const canSelfOnboard = !hasAccess && (canSelfOnboardByPolicy || canSelfOnboardByBackend);
+
+          return (
+            <article
+              key={module.key}
+              className="app-panel rounded-2xl p-5 flex flex-col gap-4"
             >
-              {mod.icon}
-            </span>
-            <div>
-              <div className="text-sm font-medium text-[var(--color-text-primary)] mb-0.5">
-                {mod.label}
+              <div className="flex items-start gap-4">
+                <span
+                  className="flex-shrink-0 w-11 h-11 rounded-xl flex items-center justify-center text-lg font-medium"
+                  style={{ background: `${module.color}18`, color: module.color }}
+                >
+                  {module.icon}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-base font-semibold text-text">{module.label}</p>
+                  <p className="mt-1 text-sm text-muted leading-relaxed">{module.description}</p>
+                  <p className="mt-2 text-xs font-medium text-muted">
+                    {hasAccess ? "Access granted" : "Access not granted"}
+                    {isModuleAdminUser ? " • Module admin" : ""}
+                  </p>
+                </div>
               </div>
-              <div className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
-                {mod.description}
-              </div>
-            </div>
-          </button>
-        ))}
-      </div>
 
-      {isAdmin && !jewelleryEnabled && (
-        <p className="mt-6 text-xs text-[var(--color-text-tertiary)]">
-          Jewellery ERP is not activated for your account. Contact support to enable it.
-        </p>
-      )}
-    </div>
+              {hasAccess ? (
+                <Button
+                  type="button"
+                  onClick={() => handleOpenModule(module)}
+                  loading={isPending && isActivating}
+                  disabled={isPending}
+                  fullWidth
+                >
+                  Open module
+                </Button>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {canRequest ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => handleRequestAccess(module, "request")}
+                      loading={isPending && isRequesting}
+                      disabled={isPending}
+                      fullWidth
+                    >
+                      Request access
+                    </Button>
+                  ) : null}
+
+                  {canSelfOnboard ? (
+                    <Button
+                      type="button"
+                      onClick={() => handleRequestAccess(module, "self_onboard")}
+                      loading={isPending && isRequesting}
+                      disabled={isPending}
+                      fullWidth
+                    >
+                      Self onboard
+                    </Button>
+                  ) : null}
+
+                  {!canRequest && !canSelfOnboard ? (
+                    <p className="text-sm text-muted">Contact your module admin to get access.</p>
+                  ) : null}
+                </div>
+              )}
+            </article>
+          );
+        })}
+      </div>
+    </Screen>
   );
 }

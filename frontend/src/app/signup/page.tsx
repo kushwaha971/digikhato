@@ -32,16 +32,8 @@ const SIGNUP_FIELDS: Array<keyof SignupFormValues> = [
 ];
 
 function getPostLoginRedirect(role: string | undefined): string {
-  switch (role) {
-    case "super_admin":
-      return ROUTES.app.superAdmin.dashboard;
-    case "borrower":
-      return ROUTES.app.portal;
-    case "admin":
-    case "collector":
-    default:
-      return ROUTES.app.udhaarbook.root;
-  }
+  if (role === "super_admin") return ROUTES.app.superAdmin.dashboard;
+  return ROUTES.app.udhaarbook.root;
 }
 
 export default function SignupPage() {

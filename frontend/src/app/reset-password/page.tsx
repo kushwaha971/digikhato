@@ -26,14 +26,8 @@ import {
 const PASSWORD_FIELDS: Array<keyof ChangePasswordFormValues> = ["old_password", "new_password", "confirm_password"];
 
 function getPostResetRedirect(role: string | undefined): string {
-  switch (role) {
-    case "super_admin":
-      return ROUTES.app.superAdmin.dashboard;
-    case "borrower":
-      return ROUTES.app.portal;
-    default:
-      return ROUTES.app.udhaarbook.root;
-  }
+  if (role === "super_admin") return ROUTES.app.superAdmin.dashboard;
+  return ROUTES.app.udhaarbook.root;
 }
 
 export default function ResetPasswordPage() {

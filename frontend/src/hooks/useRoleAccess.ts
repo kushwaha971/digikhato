@@ -1,5 +1,6 @@
 "use client";
 import { useAppSelector } from "@/store/hooks";
+import type { ModuleFeatureAccess } from "@/store/auth-slice";
 
 export type AppRole = "super_admin" | "admin" | "collector" | "borrower";
 
@@ -26,7 +27,8 @@ export type Permission =
   | "view:portal"
   | "view:customer-ledger"
   | "view:modules"
-  | "view:notes";
+  | "view:notes"
+  | "view:jewellery";
 
 // Collector permissions — Admin inherits all of these (no duplication)
 const COLLECTOR_PERMISSIONS: Permission[] = [
@@ -142,4 +144,38 @@ export function useJwlRoles(branchName?: string): string[] {
     .filter((r) => r.module === "jewellery" && r.is_active)
     .filter((r) => !branchName || r.branch_name === "" || r.branch_name === branchName)
     .map((r) => r.role_code);
+}
+
+const NO_ACCESS: ModuleFeatureAccess = { read: false, write: false };
+
+/**
+ * Returns the read/write access the current user has for a specific feature
+ * within a module. Access is derived from the features map returned at login —
+ * never hardcoded on the frontend.
+ *
+ * If the user holds multiple active roles in the same module (e.g. two branch
+ * roles), access is the union: any role granting read/write is sufficient.
+ *
+ * Example:
+ *   const { read, write } = useModuleFeature("loans", "reports")
+ *   const { read } = useModuleFeature("jewellery", "billing", "Main Branch")
+ */
+export function useModuleFeature(
+  module: string,
+  featureKey: string,
+  branchName?: string,
+): ModuleFeatureAccess {
+  const currentUser = useAppSelector((state) => state.auth.currentUser);
+  const roles = currentUser?.module_roles ?? [];
+
+  const matching = roles
+    .filter((r) => r.module === module && r.is_active)
+    .filter((r) => !branchName || r.branch_name === "" || r.branch_name === branchName);
+
+  if (matching.length === 0) return NO_ACCESS;
+
+  return {
+    read:  matching.some((r) => r.features?.[featureKey]?.read  === true),
+    write: matching.some((r) => r.features?.[featureKey]?.write === true),
+  };
 }

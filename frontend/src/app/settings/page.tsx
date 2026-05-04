@@ -22,7 +22,7 @@ import {
   useLogoutMutation,
   useUpdateMeMutation,
 } from "@/features/auth/auth-api";
-import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { useFeatureFlag, useRoleAccess } from "@/hooks/useRoleAccess";
 import { ROUTES } from "@/lib/routes";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { clearAuth, setCurrentUser } from "@/store/auth-slice";
@@ -127,7 +127,29 @@ export default function SettingsPage() {
     return () => clearTimeout(timer);
   }, [passwordSaved]);
 
-  const { isAdmin } = useRoleAccess();
+  const { isAdmin, can } = useRoleAccess();
+  const jewelleryEnabled = useFeatureFlag("jewellery");
+
+  const coreApps = [
+    { key: "udhaar", label: "UdhaarBook", status: "Included" },
+    { key: "notes", label: "Notes", status: "Included" },
+  ];
+  const addonApps = [
+    {
+      key: "loans",
+      label: "Loan Management",
+      status: can("view:dashboard") ? "Active" : "Role Locked",
+    },
+    {
+      key: "jewellery",
+      label: "Jewellery ERP",
+      status: jewelleryEnabled
+        ? can("view:jewellery")
+          ? "Active"
+          : "Role Locked"
+        : "Activation Pending",
+    },
+  ];
 
   const handleLogout = async () => {
     try {
@@ -289,6 +311,36 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        <div className="app-panel">
+          <div className="p-4 border-b border-border">
+            <h2 className="font-semibold text-text">Workspace & Access</h2>
+            <p className="text-xs text-muted mt-0.5">
+              SaaS-style app access model for your workspace.
+            </p>
+          </div>
+          <div className="p-4 space-y-4">
+            <div>
+              <p className="text-[11px] uppercase tracking-wide text-muted mb-2">Included Apps</p>
+              <div className="space-y-2">
+                {coreApps.map((app) => (
+                  <AccessRow key={app.key} label={app.label} status={app.status} />
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-wide text-muted mb-2">Other Apps</p>
+              <div className="space-y-2">
+                {addonApps.map((app) => (
+                  <AccessRow key={app.key} label={app.label} status={app.status} />
+                ))}
+              </div>
+            </div>
+            <p className="text-xs text-muted">
+              Payment gateway and external billing are not configured yet. Module activation is managed internally.
+            </p>
+          </div>
+        </div>
+
         {isAdmin && (
           <div className="app-panel">
             <div className="p-4 border-b border-border">
@@ -376,5 +428,23 @@ export default function SettingsPage() {
         confirmVariant="danger"
       />
     </Screen>
+  );
+}
+
+function AccessRow({ label, status }: Readonly<{ label: string; status: string }>) {
+  const toneClass =
+    status === "Active" || status === "Included"
+      ? "bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-300"
+      : status === "Activation Pending"
+        ? "bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-300"
+        : "bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300";
+
+  return (
+    <div className="flex items-center justify-between px-3 py-2 rounded-lg border border-border bg-surface2/40">
+      <p className="text-sm text-text">{label}</p>
+      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${toneClass}`}>
+        {status}
+      </span>
+    </div>
   );
 }

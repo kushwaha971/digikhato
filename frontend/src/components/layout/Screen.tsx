@@ -9,6 +9,7 @@ interface BreadcrumbItem {
 
 interface ScreenProps {
   readonly title?: string;
+  readonly subtitle?: string;
   readonly breadcrumb?: BreadcrumbItem[];
   readonly actions?: ReactNode;
   readonly children: ReactNode;
@@ -18,17 +19,17 @@ interface ScreenProps {
   readonly backHref?: string;
 }
 
-export function Screen({ title, breadcrumb, actions, children, noPadding = false, fullWidth = false, backHref }: ScreenProps) {
+export function Screen({ title, subtitle, breadcrumb, actions, children, noPadding = false, fullWidth = false, backHref }: ScreenProps) {
   const containerClass = fullWidth ? "w-full px-4 sm:px-6 lg:px-8" : "app-container";
-  const contentClass = noPadding ? "flex-1" : `flex-1 ${containerClass} py-4 md:py-6`;
+  const contentClass = noPadding ? "flex-1" : `flex-1 ${containerClass} py-5 md:py-7`;
 
   return (
     <div className="min-h-screen flex flex-col">
       {/* Sticky page header */}
-      {(title || breadcrumb || actions) && (
-        <div className="sticky top-16 z-20 bg-canvas/90 backdrop-blur-md border-b border-border flex-shrink-0">
+      {(title || subtitle || breadcrumb || actions) && (
+        <div className="sticky top-16 lg:top-[var(--desktop-screen-top,0px)] z-20 bg-canvas/90 backdrop-blur-md border-b border-border flex-shrink-0">
           <div className={containerClass}>
-            <div className="py-3 flex flex-row items-center justify-between gap-3">
+            <div className="py-4 flex flex-row items-start justify-between gap-3">
               <div className="min-w-0 flex items-center gap-2 flex-1">
                 {backHref && (
                   <PageBackButton fallbackHref={backHref} />
@@ -55,8 +56,9 @@ export function Screen({ title, breadcrumb, actions, children, noPadding = false
                     </nav>
                   )}
                   {title && (
-                    <h1 className="text-base font-bold text-text truncate">{title}</h1>
+                    <h1 className="text-xl md:text-2xl font-bold text-text truncate leading-tight">{title}</h1>
                   )}
+                  {subtitle ? <p className="text-sm text-muted mt-1 truncate">{subtitle}</p> : null}
                 </div>
               </div>
               {actions && (

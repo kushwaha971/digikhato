@@ -69,7 +69,7 @@ export default function OnboardingPage() {
             <BrandLogo size="lg" href="/" />
           </div>
           <h1 className="text-2xl font-bold text-text">Set up your workspace</h1>
-          <p className="text-muted text-sm mt-1">A few details to get you started</p>
+          <p className="text-muted text-sm mt-1">Set your core workspace details and start with your included apps</p>
         </div>
 
         <div className="flex items-center justify-center gap-2 mb-6">
@@ -92,8 +92,8 @@ export default function OnboardingPage() {
               </svg>
             </div>
             <h2 className="text-lg font-bold text-text mb-1">You&apos;re all set!</h2>
-            <p className="text-sm text-muted mb-6">Your workspace is ready. Open your apps to get started.</p>
-            <Button size="lg" fullWidth onClick={() => { router.replace(ROUTES.app.loans.dashboard); }}>
+            <p className="text-sm text-muted mb-6">Your workspace is ready. UdhaarBook and Notes are included by default. Other apps can be activated later.</p>
+            <Button size="lg" fullWidth onClick={() => { router.replace(ROUTES.app.udhaarbook.root); }}>
               Go to Apps
             </Button>
           </div>
