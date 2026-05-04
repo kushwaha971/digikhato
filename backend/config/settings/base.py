@@ -67,11 +67,11 @@ ASGI_APPLICATION = "config.asgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("POSTGRES_DB", "loan_mgmt"),
-        "USER": os.getenv("POSTGRES_USER", "postgres"),
-        "PASSWORD": os.getenv("POSTGRES_PASSWORD", "postgres"),
-        "HOST": os.getenv("POSTGRES_HOST", "localhost"),
-        "PORT": os.getenv("POSTGRES_PORT", "5432"),
+        "NAME": os.getenv("POSTGRES_DB", os.getenv("PGDATABASE", "loan_mgmt")),
+        "USER": os.getenv("POSTGRES_USER", os.getenv("PGUSER", "postgres")),
+        "PASSWORD": os.getenv("POSTGRES_PASSWORD", os.getenv("PGPASSWORD", "postgres")),
+        "HOST": os.getenv("POSTGRES_HOST", os.getenv("PGHOST", "localhost")),
+        "PORT": os.getenv("POSTGRES_PORT", os.getenv("PGPORT", "5432")),
     }
 }
 
