@@ -39,6 +39,22 @@ cd ../frontend && docker compose up --build
 - If Railway deploys from repo root by mistake, this repo now has a root `package.json` fallback that builds/starts the frontend automatically.
 - For backend deployments, still use service root directory `/backend` (or config path `/backend/railway.json`) to avoid Node root autodetection.
 
+### Backend Bootstrap on Railway
+- Manual commands (from backend shell):
+  - `python manage.py bootstrap_superadmin --mobile 9999999999 --password 'StrongPass123' --full-name 'Super Admin'`
+  - `python manage.py bootstrap_admin_tenant --mobile 8888888888 --password 'StrongPass123' --full-name 'Tenant Admin' --seed-jewellery`
+- No-shell option (startup automation using backend service variables):
+  - `AUTO_BOOTSTRAP_SUPERADMIN=1`
+  - `SUPERADMIN_MOBILE=...`
+  - `SUPERADMIN_PASSWORD=...`
+  - `SUPERADMIN_FULL_NAME=Super Admin`
+  - `AUTO_BOOTSTRAP_ADMIN_TENANT=1`
+  - `ADMIN_TENANT_MOBILE=...`
+  - `ADMIN_TENANT_PASSWORD=...`
+  - `ADMIN_TENANT_FULL_NAME=Tenant Admin`
+  - `AUTO_SEED_JEWELLERY_DEFAULTS=1`
+- After first successful deploy, set `AUTO_BOOTSTRAP_SUPERADMIN=0` and `AUTO_BOOTSTRAP_ADMIN_TENANT=0`.
+
 ## Environment
 - Backend variables: create [`backend/.env`](/Users/akashkushwaha/Projects/money-mgmt/backend/.env) from [`backend/.env.example`](/Users/akashkushwaha/Projects/money-mgmt/backend/.env.example)
 - Frontend variables: create [`frontend/.env.local`](/Users/akashkushwaha/Projects/money-mgmt/frontend/.env.local) from [`frontend/.env.local.example`](/Users/akashkushwaha/Projects/money-mgmt/frontend/.env.local.example)
