@@ -1,7 +1,14 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
-from apps.common.constants import JWL_ROLE_PERMISSIONS, JwlRoleCode, ModuleCode, RoleChoices
+from apps.common.constants import (
+    JWL_ROLE_FEATURES,
+    JWL_ROLE_PERMISSIONS,
+    LOANS_ROLE_FEATURES,
+    JwlRoleCode,
+    ModuleCode,
+    RoleChoices,
+)
 from apps.users.models import User, UserModuleRole
 
 
@@ -53,14 +60,20 @@ ROLE_PERMISSIONS = {
 
 class UserModuleRoleSerializer(serializers.ModelSerializer):
     jwl_permissions = serializers.SerializerMethodField()
+    features = serializers.SerializerMethodField()
 
     class Meta:
         model = UserModuleRole
-        fields = ["id", "module", "role_code", "branch_name", "is_active", "jwl_permissions", "granted_by"]
-        read_only_fields = ["id", "granted_by", "jwl_permissions"]
+        fields = ["id", "module", "role_code", "branch_name", "is_active", "jwl_permissions", "features", "granted_by"]
+        read_only_fields = ["id", "granted_by", "jwl_permissions", "features"]
 
     def get_jwl_permissions(self, obj):
         return JWL_ROLE_PERMISSIONS.get(obj.role_code, [])
+
+    def get_features(self, obj):
+        if obj.module == ModuleCode.JEWELLERY:
+            return JWL_ROLE_FEATURES.get(obj.role_code, {})
+        return {}
 
 
 class UserModuleRoleCreateSerializer(serializers.ModelSerializer):
@@ -84,6 +97,9 @@ class UserSerializer(serializers.ModelSerializer):
     capabilities = serializers.SerializerMethodField()
     module_roles = serializers.SerializerMethodField()
     feature_flags = serializers.SerializerMethodField()
+    accessible_modules = serializers.SerializerMethodField()
+    default_module = serializers.SerializerMethodField()
+    module_admin = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -102,6 +118,9 @@ class UserSerializer(serializers.ModelSerializer):
             "capabilities",
             "module_roles",
             "feature_flags",
+            "accessible_modules",
+            "default_module",
+            "module_admin",
         ]
 
     def get_permissions(self, obj):
@@ -114,9 +133,38 @@ class UserSerializer(serializers.ModelSerializer):
             "can_manage_team": obj.role in (RoleChoices.SUPER_ADMIN, RoleChoices.ADMIN),
         }
 
-    def get_module_roles(self, obj):
+    def _resolve_module_roles(self, obj):
+        cache_key = f"user_module_roles:{obj.pk}"
+        cached = self.context.get(cache_key)
+        if cached is not None:
+            return cached
+
         roles = UserModuleRole.objects.filter(user=obj, is_active=True).select_related()
-        return UserModuleRoleSerializer(roles, many=True).data
+        serialized = UserModuleRoleSerializer(roles, many=True).data
+
+        # Inject a synthetic loans module role derived from the user's system role.
+        # Loans access is governed by user.role (admin/collector/borrower), not by a
+        # UserModuleRole record — we surface it here so the frontend treats all modules
+        # identically.
+        if obj.role != RoleChoices.SUPER_ADMIN:
+            loans_features = LOANS_ROLE_FEATURES.get(obj.role, {})
+            loans_role = {
+                "id": None,
+                "module": ModuleCode.LOANS,
+                "role_code": obj.role,
+                "branch_name": "",
+                "is_active": True,
+                "jwl_permissions": [],
+                "features": loans_features,
+                "granted_by": None,
+            }
+            serialized = [loans_role] + list(serialized)
+
+        self.context[cache_key] = serialized
+        return serialized
+
+    def get_module_roles(self, obj):
+        return self._resolve_module_roles(obj)
 
     def get_feature_flags(self, obj):
         # Resolve the tenant root (admin user) whose BusinessProfile holds the flags.
@@ -127,6 +175,68 @@ class UserSerializer(serializers.ModelSerializer):
             return tenant_user.business_profile.feature_flags or {}
         except Exception:
             return {}
+
+    @staticmethod
+    def _module_has_access(features: dict) -> bool:
+        for access in (features or {}).values():
+            if access.get("read") or access.get("write"):
+                return True
+        return False
+
+    def get_accessible_modules(self, obj):
+        if obj.role == RoleChoices.SUPER_ADMIN:
+            return list(ModuleCode.values)
+
+        modules = set()
+        if obj.role in (RoleChoices.ADMIN, RoleChoices.COLLECTOR):
+            modules.add(ModuleCode.UDHAAR)
+
+        for role in self._resolve_module_roles(obj):
+            if self._module_has_access(role.get("features", {})):
+                modules.add(role.get("module"))
+
+        for module, enabled in (self.get_feature_flags(obj) or {}).items():
+            if enabled and module in ModuleCode.values:
+                modules.add(module)
+
+        preferred_order = [ModuleCode.UDHAAR, ModuleCode.LOANS, ModuleCode.JEWELLERY]
+        ordered = [module for module in preferred_order if module in modules]
+        for module in sorted(modules):
+            if module not in ordered:
+                ordered.append(module)
+        return ordered
+
+    def get_default_module(self, obj):
+        accessible = self.get_accessible_modules(obj)
+        if not accessible:
+            return None
+        return accessible[0]
+
+    def get_module_admin(self, obj):
+        roles = self._resolve_module_roles(obj)
+        role_by_module = {role.get("module"): role for role in roles}
+        response = {}
+
+        for module in ModuleCode.values:
+            role_data = role_by_module.get(module) or {}
+            features = role_data.get("features", {})
+            can_manage = bool(
+                features.get("team", {}).get("write")
+                or features.get("users_roles", {}).get("write")
+                or features.get("admin", {}).get("write")
+            )
+            can_self_onboard = obj.role in (RoleChoices.ADMIN, RoleChoices.COLLECTOR)
+            if obj.role == RoleChoices.SUPER_ADMIN:
+                can_manage = True
+                can_self_onboard = False
+
+            response[module] = {
+                "can_manage_users": can_manage,
+                "can_assign_roles": can_manage,
+                "can_self_onboard": can_self_onboard,
+            }
+
+        return response
 
 
 class UserPreferenceSerializer(serializers.ModelSerializer):

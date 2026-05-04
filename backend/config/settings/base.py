@@ -21,6 +21,7 @@ INSTALLED_APPS = [
     "apps.common",
     "apps.users",
     "apps.onboarding",
+    "apps.jewellery",
     "apps.borrowers",
     "apps.loans",
     "apps.collections",

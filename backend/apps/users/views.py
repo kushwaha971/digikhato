@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db.models.deletion import ProtectedError
-from rest_framework import generics, status
+from django.db.models import Q
+from rest_framework import generics, serializers, status
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -9,6 +10,8 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 
 from apps.common.audit import log_action
+from apps.common.constants import JWL_ROLE_PERMISSIONS, JwlRoleCode, ModuleCode, RoleChoices
+from apps.onboarding.models import BusinessProfile
 from apps.users.models import User, UserModuleRole
 from apps.users.serializers import (
     MobileTokenObtainSerializer,
@@ -33,6 +36,95 @@ def get_effective_tenant(user):
     if user.role in ("collector", "borrower") and user.tenant:
         return user.tenant
     return None
+
+
+def _is_valid_module(module: str) -> bool:
+    return module in ModuleCode.values
+
+
+def _module_self_onboard_allowed(user, module: str) -> bool:
+    if not _is_valid_module(module):
+        return False
+    return user.role in (RoleChoices.ADMIN, RoleChoices.COLLECTOR)
+
+
+def _module_admin_flags(user, module: str) -> dict[str, bool]:
+    if user.role == RoleChoices.SUPER_ADMIN:
+        return {
+            "can_manage_users": True,
+            "can_assign_roles": True,
+            "can_self_onboard": False,
+        }
+
+    can_manage = False
+    if module == ModuleCode.LOANS:
+        can_manage = user.role == RoleChoices.ADMIN
+    elif module == ModuleCode.JEWELLERY:
+        active_roles = UserModuleRole.objects.filter(
+            user=user,
+            module=ModuleCode.JEWELLERY,
+            is_active=True,
+        )
+        for role in active_roles:
+            if "jwl.admin.manage" in JWL_ROLE_PERMISSIONS.get(role.role_code, []):
+                can_manage = True
+                break
+
+    return {
+        "can_manage_users": can_manage,
+        "can_assign_roles": can_manage,
+        "can_self_onboard": _module_self_onboard_allowed(user, module),
+    }
+
+
+def _activate_module_for_user(*, actor, target_user, module: str) -> dict:
+    tenant = get_effective_tenant(target_user) or target_user
+    profile, _ = BusinessProfile.objects.get_or_create(owner=tenant)
+    feature_flags = dict(profile.feature_flags or {})
+    feature_flags[module] = True
+    profile.feature_flags = feature_flags
+    profile.save(update_fields=["feature_flags"])
+
+    module_role_data = None
+    if module == ModuleCode.JEWELLERY:
+        granted_by = actor if actor and actor.is_authenticated else target_user
+        role, created = UserModuleRole.objects.get_or_create(
+            user=target_user,
+            module=ModuleCode.JEWELLERY,
+            role_code=JwlRoleCode.ADMIN,
+            branch_name="",
+            defaults={"granted_by": granted_by, "is_active": True},
+        )
+        if not created and not role.is_active:
+            role.is_active = True
+            role.save(update_fields=["is_active"])
+        module_role_data = UserModuleRoleSerializer(role).data
+
+    return {
+        "module": module,
+        "feature_enabled": True,
+        "module_role": module_role_data,
+    }
+
+
+def _tenant_scoped_users(user):
+    tenant = get_effective_tenant(user)
+    if not tenant:
+        return User.objects.none(), None
+    qs = User.objects.filter(Q(pk=tenant.pk) | Q(tenant=tenant))
+    return qs, tenant
+
+
+def _serialize_module_role_with_user(role: UserModuleRole) -> dict:
+    data = UserModuleRoleSerializer(role).data
+    data["user"] = {
+        "id": role.user_id,
+        "full_name": role.user.full_name,
+        "mobile_number": role.user.mobile_number,
+        "role": role.user.role,
+        "is_active": role.user.is_active,
+    }
+    return data
 
 
 def _set_refresh_cookie(response, token_value):
@@ -434,4 +526,242 @@ class UserModuleRoleDetailView(APIView):
         log_action(request, "revoke_module_role", model_name="UserModuleRole",
                    object_id=role.pk,
                    detail=f"Revoked {role.module}:{role.role_code} from user {pk}")
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ModuleSelfActivateView(APIView):
+    """Activate a module for the current user's tenant and self-assign owner role when applicable.
+
+    POST /api/users/modules/activate/
+      body: { "module": "loans" | "jewellery" | ... }
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if request.user.role not in (RoleChoices.ADMIN, RoleChoices.COLLECTOR):
+            raise PermissionDenied("Only admin or collector users can activate modules.")
+
+        module = str(request.data.get("module", "")).strip()
+        if not _is_valid_module(module):
+            return Response(
+                {"module": f"Invalid module. Choices: {ModuleCode.values}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        payload = _activate_module_for_user(actor=request.user, target_user=request.user, module=module)
+        tenant = get_effective_tenant(request.user) or request.user
+
+        log_action(
+            request,
+            "activate_module",
+            model_name="User",
+            object_id=request.user.pk,
+            detail=f"Activated module {module} for tenant {tenant.pk}",
+        )
+
+        return Response(payload, status=status.HTTP_200_OK)
+
+
+class ModuleRequestAccessView(APIView):
+    """
+    POST /api/users/modules/request-access/
+      body: { "module": "loans" | "udhaar" | "jewellery" }
+
+    If self-onboarding is allowed for the requester and module, the module is
+    activated immediately. Otherwise returns a pending approval response.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        module = str(request.data.get("module", "")).strip()
+        action = str(request.data.get("action") or request.data.get("mode") or "request").strip().lower()
+        if not _is_valid_module(module):
+            return Response(
+                {"module": f"Invalid module. Choices: {ModuleCode.values}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if action not in ("request", "self_onboard"):
+            return Response(
+                {"action": "Invalid action. Use 'request' or 'self_onboard'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if action == "self_onboard" and _module_self_onboard_allowed(request.user, module):
+            payload = _activate_module_for_user(actor=request.user, target_user=request.user, module=module)
+            payload["status"] = "activated"
+            log_action(
+                request,
+                "request_module_access_auto_approved",
+                model_name="User",
+                object_id=request.user.pk,
+                detail=f"Auto-activated module {module}",
+            )
+            return Response(payload, status=status.HTTP_200_OK)
+        if action == "self_onboard":
+            return Response(
+                {
+                    "module": module,
+                    "status": "not_allowed",
+                    "feature_enabled": False,
+                    "detail": "Self onboarding is not allowed for this user or module.",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        log_action(
+            request,
+            "request_module_access_pending",
+            model_name="User",
+            object_id=request.user.pk,
+            detail=f"Requested module access for {module}",
+        )
+        return Response(
+            {
+                "module": module,
+                "status": "pending_approval",
+                "feature_enabled": False,
+                "detail": "Access request submitted and awaiting module admin approval.",
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+
+class ModuleTeamRoleView(APIView):
+    """
+    Module-scoped role management for tenant users.
+
+    GET  /api/users/modules/<module>/team-roles/
+    POST /api/users/modules/<module>/team-roles/
+      body: { "user_id": int, "role_code": str, "branch_name": str? }
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @staticmethod
+    def _assert_supported_module(module: str):
+        if not _is_valid_module(module):
+            raise serializers.ValidationError({"module": f"Invalid module. Choices: {ModuleCode.values}"})
+        if module != ModuleCode.JEWELLERY:
+            raise serializers.ValidationError(
+                {"module": "Module role management is currently supported only for jewellery."}
+            )
+
+    def _assert_manage_access(self, request, module: str):
+        flags = _module_admin_flags(request.user, module)
+        if not flags["can_manage_users"]:
+            raise PermissionDenied("You do not have module admin access for this module.")
+
+    def get(self, request, module):
+        self._assert_supported_module(module)
+        self._assert_manage_access(request, module)
+
+        tenant_users, _ = _tenant_scoped_users(request.user)
+        if not tenant_users.exists():
+            return Response([], status=status.HTTP_200_OK)
+
+        roles = UserModuleRole.objects.filter(
+            module=module,
+            user__in=tenant_users,
+            is_active=True,
+        ).select_related("user", "granted_by")
+        payload = [_serialize_module_role_with_user(role) for role in roles]
+        return Response(payload, status=status.HTTP_200_OK)
+
+    def post(self, request, module):
+        self._assert_supported_module(module)
+        self._assert_manage_access(request, module)
+
+        tenant_users, _ = _tenant_scoped_users(request.user)
+        if not tenant_users.exists():
+            raise PermissionDenied("No tenant scope found for this user.")
+
+        user_id = request.data.get("user_id")
+        if not user_id:
+            return Response({"user_id": "This field is required."}, status=status.HTTP_400_BAD_REQUEST)
+        member = tenant_users.filter(pk=user_id).first()
+        if not member:
+            return Response(NOT_FOUND, status=status.HTTP_404_NOT_FOUND)
+
+        payload = {
+            "module": module,
+            "role_code": request.data.get("role_code"),
+            "branch_name": request.data.get("branch_name", ""),
+        }
+        serializer = UserModuleRoleCreateSerializer(data=payload)
+        serializer.is_valid(raise_exception=True)
+        validated = serializer.validated_data
+
+        role, created = UserModuleRole.objects.get_or_create(
+            user=member,
+            module=module,
+            role_code=validated["role_code"],
+            branch_name=validated["branch_name"],
+            defaults={"granted_by": request.user, "is_active": True},
+        )
+        if not created and not role.is_active:
+            role.is_active = True
+            role.granted_by = request.user
+            role.save(update_fields=["is_active", "granted_by"])
+
+        action = "assign_module_role" if created else "reactivate_module_role"
+        log_action(
+            request,
+            action,
+            model_name="UserModuleRole",
+            object_id=role.pk,
+            detail=f"Module {module}: assigned {role.role_code} to user {member.pk}",
+        )
+        status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        role = UserModuleRole.objects.select_related("user", "granted_by").get(pk=role.pk)
+        return Response(_serialize_module_role_with_user(role), status=status_code)
+
+
+class ModuleTeamRoleDetailView(APIView):
+    """
+    DELETE /api/users/modules/<module>/team-roles/<role_id>/
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, module, role_id):
+        if not _is_valid_module(module):
+            return Response(
+                {"module": f"Invalid module. Choices: {ModuleCode.values}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if module != ModuleCode.JEWELLERY:
+            return Response(
+                {"module": "Module role management is currently supported only for jewellery."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        flags = _module_admin_flags(request.user, module)
+        if not flags["can_assign_roles"]:
+            raise PermissionDenied("You do not have module admin access for this module.")
+
+        tenant_users, _ = _tenant_scoped_users(request.user)
+        if not tenant_users.exists():
+            raise PermissionDenied("No tenant scope found for this user.")
+
+        role = UserModuleRole.objects.filter(
+            pk=role_id,
+            module=module,
+            user__in=tenant_users,
+            is_active=True,
+        ).first()
+        if not role:
+            return Response(NOT_FOUND, status=status.HTTP_404_NOT_FOUND)
+
+        role.is_active = False
+        role.save(update_fields=["is_active"])
+        log_action(
+            request,
+            "revoke_module_role",
+            model_name="UserModuleRole",
+            object_id=role.pk,
+            detail=f"Module {module}: revoked {role.role_code} from user {role.user_id}",
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)

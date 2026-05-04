@@ -1,9 +1,9 @@
 # Jewellery ERP — AI Agent Handoff Document
 
 **Module:** DigiKhaato Jewellery ERP  
-**Last Updated:** 2026-05-02  
-**Last Agent:** Claude (Sonnet 4.6) — documentation pass  
-**Next Agent:** Whoever picks this up next — start from **Phase 1, Task B-1.1** (see § Current Work)
+**Last Updated:** 2026-05-03  
+**Last Agent:** Codex (GPT-5) — completed SaaS UI follow-up: removed unnecessary desktop header gap, switched jewellery sidebar to module-feature→sub-feature IA, added query-aware sub-feature active state, and mapped sub-feature pages to contextual header/button/tile presets  
+**Next Agent:** Whoever picks this up next — start from **Phase 1, Task B-1.3** (Inventory backend)
 
 > **How to use this document**
 > Read §1 (Current Status) and §2 (Next Agent Instructions) first. Then read the relevant phase section for context. Update §1 and the task checkbox that you completed before your context ends.
@@ -16,18 +16,39 @@
 PHASE          STATUS
 ─────────────────────────────────────────────────
 Documentation  ✅ COMPLETE
-Phase 1        ⏳ NOT STARTED
+Phase 1        🔄 IN PROGRESS
 Phase 2        ⏳ NOT STARTED
 Phase 3        ⏳ NOT STARTED
 ```
 
 ### What exists right now
 
-**Backend — Jewellery app: DOES NOT EXIST**  
-No `apps/jewellery/` directory. No models, views, URLs for jewellery.
+**Backend — Jewellery app: BOOTSTRAPPED + INTEGRATION ENDPOINT READY**  
+`backend/apps/jewellery/` now has app config, URL namespace, base model, permission guards, phase placeholders, and a working `/api/jwl/v1/system/bootstrap/` endpoint with tests.
 
-**Frontend — Jewellery module: DOES NOT EXIST**  
-No `/jewellery` routes, no RTK slice, no jewellery components.
+**Frontend — Jewellery module: SHELL READY (F-1.1 done)**  
+`/jewellery` route tree, module API slice, full 15-module sidebar parity, and dashboard KPI stub are implemented.
+
+**Frontend — Multi-module platform UX: UPDATED (2026-05-02)**  
+Default post-auth landing for regular app users is UdhaarBook (`/udhaarbook`). Modules page is simplified to plain module cards (Loan Management + Jewellery ERP only), without status chips or activation messages.
+
+**Frontend — SaaS Messaging Layer: UPDATED (2026-05-02)**  
+Landing, modules, and onboarding copy now reflect a modular SaaS model: Notes/UdhaarBook as core included apps, jewellery/loans as activation-based add-ons, and “Django + Postgres first, external integrations later” positioning.
+
+**Frontend — SaaS UI Layer: UPDATED (2026-05-02)**  
+Sidebar/mobile app navigation now includes a `Modules` entry at the bottom of the `Apps` list. Jewellery is no longer hidden by frontend feature-flag gating, so users can open/start module flows directly from UI.
+
+**Frontend — Sidebar IA Layer: UPDATED (2026-05-03)**  
+Apps in sidebar/drawer now follow SaaS-style hierarchy: each top-level feature can reveal nested sub-features via expand/collapse chevrons, and groups auto-expand on active route.
+
+**Frontend — SaaS Visual Polish Layer: UPDATED (2026-05-03)**  
+Shared page layout (`Screen` + `app-container`) now uses wider, left-aligned workspace spacing with stronger heading hierarchy; modules page and jewellery screens now render structured SaaS-style cards/tables instead of sparse centered placeholders.
+
+**Frontend — Jewellery IA + Header Spacing: UPDATED (2026-05-03)**  
+In Jewellery module routes, sidebar is now module-first (feature groups with nested sub-features) instead of module-as-feature grouping. Desktop utility header auto-hides when not needed, removing empty top space.
+
+**Frontend — Jewellery Sub-feature Screens: UPDATED (2026-05-03)**  
+Billing, Inventory, Karigar, and Gold Pledge screens now map `?view=...` sub-features to contextual page headers and top action/summary presets so selected sub-features no longer render as a single generic page.
 
 **Existing platform (do not modify without reading first):**
 - `backend/apps/common/` — shared audit, permissions, pagination utilities
@@ -45,6 +66,43 @@ No `/jewellery` routes, no RTK slice, no jewellery components.
 
 **START HERE. Read before touching any file.**
 
+### Cross-Module Access Program (NEW — 2026-05-03)
+
+This repo now needs a **module-isolated SaaS access model** across Loans, UdhaarBook, and Jewellery (JWL):
+
+1. Sidebar/drawer must show **only the selected module**.
+2. Module visibility and feature visibility must be **API-driven** from `module_roles[].features`.
+3. New users with zero module access must land on an **Access Onboarding** screen (no module sidebar features).
+4. Module admins can manage users/roles **only within their module**.
+5. A user can be `admin` in module A and a constrained role in module B simultaneously.
+
+#### Target behavior
+
+- If `UdhaarBook` is selected, show only UdhaarBook nav + features.
+- If `Loan Management` is selected, show only loan nav + features.
+- If `Jewellery ERP` is selected, show only JWL nav + features.
+- No cross-module role assignment from module admin surfaces.
+
+#### Delivery plan (implementation sequence)
+
+1. **Module selection + isolation in frontend shell**
+   - Introduce selected-module state.
+   - Sidebar/mobile/bottom nav render only selected module.
+   - Module switcher lists only modules user can access.
+2. **No-access onboarding flow**
+   - Login redirect resolver must route zero-access users to onboarding page.
+   - Add page with `Request access` + (policy-gated) `Self-onboard`.
+3. **Backend access metadata**
+   - Extend `/api/auth/me/` payload with `accessible_modules`, `default_module`, and `module_admin` capability flags.
+4. **Module-scoped user management APIs**
+   - New endpoints for module team management.
+   - Enforce strict server-side checks so module admins cannot grant outside their module.
+5. **Frontend API integration**
+   - Wire onboarding actions, module selection persistence, and module-scoped team screens.
+6. **Guardrails + tests**
+   - Block module route access if no active role for that module.
+   - Add tests for cross-module assignment denial and zero-access redirects.
+
 ### Mandatory reading (in this order)
 1. `docs/jewellery/00-overview-and-architecture.md` — architecture decisions
 2. `docs/jewellery/02-database-schema.md` — exact model definitions
@@ -52,15 +110,15 @@ No `/jewellery` routes, no RTK slice, no jewellery components.
 4. `docs/jewellery/DigiKhaato-Jewellery-ERP-COMPLETE.md` Section 7 — all business formulas
 
 ### Current task to resume
-**Phase 1 — Backend Bootstrap (B-1.1)**  
-Create the `apps/jewellery/` Django app with base models.
+**Phase 1 — Item (Inventory) Models (B-1.3)**  
+Implement inventory models, serializers, viewsets, and services with stock movement workflows.
 
 ### Exact next steps
-1. Read `backend/apps/common/models.py` — understand existing base model patterns
-2. Read `backend/apps/common/permissions.py` — understand permission class pattern
-3. Read `backend/config/settings.py` (or wherever `INSTALLED_APPS` lives) — to know where to register the new app
-4. Create `backend/apps/jewellery/` following the structure in `docs/jewellery/00-overview-and-architecture.md §3.2`
-5. Implement Phase 1 backend tasks in order: B-1.1 → B-1.2 → B-1.3 → B-1.4 → B-1.5
+1. Implement `backend/apps/jewellery/models/inventory.py` with `Item`, `Diamond`, `Stone`, `StockMovement`, `StockTake`, `StockTakeLine`, `Transfer`, `TransferLine`
+2. Create `backend/apps/jewellery/serializers/inventory.py`, `views/inventory.py`, and `services/inventory.py`
+3. Add inventory URLs under `/api/jwl/v1/` (`items`, `stock-movements`, `stock-takes`, `transfers`)
+4. Add write-off and scan endpoints with stock movement + audit side effects
+5. Add B-1.3 tests: write-off movement type, scan by barcode/sku/huid, and tenant isolation
 
 ### Rules for this codebase
 - Every jewellery model must extend `JewelleryBaseModel` (defined in `02-database-schema.md`)
@@ -89,6 +147,19 @@ Decisions that are **final** — do not revisit without a good reason.
 | D-08 | Phase 1: MCX rate is manual override only; Phase 2: live feed | MCX API licensing is a blocker; don't block Phase 1 shipping | 2026-05-02 |
 | D-09 | Aadhaar: only last 4 digits in any API response; encrypted in DB | DPDP Act 2023 compliance | 2026-05-02 |
 | D-10 | Frontend jewellery module uses separate RTK slice `jewelleryApi` | Keeps jewellery state isolated from loans/udhhar state | 2026-05-02 |
+| D-11 | Jewellery base model uses `tenant` FK to `AUTH_USER_MODEL` and `branch_name` string in this repo | Current platform has no `core.Tenant/core.Branch` models; branch context is string/header based | 2026-05-02 |
+| D-12 | Add `/api/jwl/v1/system/bootstrap/` as initial backend↔frontend handshake endpoint | Enables end-to-end module integration before full business APIs are implemented | 2026-05-02 |
+| D-13 | Master data (`Metal`, `Purity`) is tenant-scoped in this repo and seeded per tenant by command | Keeps strict tenancy boundaries while honoring `JewelleryBaseModel` requirement | 2026-05-02 |
+| D-14 | Default post-auth landing for regular app users is `/udhaarbook` | UdhaarBook is the default working module; additional modules are optional via Modules section | 2026-05-02 |
+| D-15 | Notes and UdhaarBook remain on existing list routes (no separate dashboard entrypoint) | These two modules are free/common flows and should stay simple for all internal users | 2026-05-02 |
+| D-16 | Module cards trigger self-service activation endpoint before navigation | Users can start modules without pre-assigned membership; jewellery auto-assigns `jwl_admin` role to starter user | 2026-05-02 |
+| D-17 | Sidebar uses expandable parent→sub-feature navigation for module apps | Matches expected SaaS information architecture and makes module capabilities discoverable without route guessing | 2026-05-03 |
+| D-18 | Use shared wide workspace layout + structured placeholder templates for unfinished jewellery screens | Keeps visual consistency and avoids incomplete/empty-feeling pages while backend modules are still being implemented | 2026-05-03 |
+| D-19 | In Jewellery routes, sidebar IA is module-first (feature groups + sub-features); desktop utility header hides when empty | Matches requested SaaS navigation semantics and removes unnecessary header whitespace | 2026-05-03 |
+| D-20 | Sidebar active-state matching must include query params for sub-feature links (`?view=...`) | Ensures only the selected sub-feature is highlighted and auto-expanded correctly in SaaS-style feature trees | 2026-05-03 |
+| D-21 | Navigation must be selected-module scoped (never mixed-module sidebar) | Prevents accidental exposure/confusion and enforces platform-within-platform UX | 2026-05-03 |
+| D-22 | Zero-access users must land on Access Onboarding (not a module route) | Explicitly handles first-login without module assignment and avoids dead-end UX | 2026-05-03 |
+| D-23 | Module admins can assign roles only inside their module | Enforces hard authorization boundaries across modules in shared SaaS tenant | 2026-05-03 |
 
 ---
 
@@ -108,8 +179,87 @@ Decisions that are **final** — do not revisit without a good reason.
 | `docs/jewellery/07-ai-agent-playbook.md` | ✅ Created | Agent roles, domain knowledge |
 | `docs/jewellery/AGENT-HANDOFF.md` | ✅ Created | This file |
 
-### Code files (none yet — implementation not started)
-_Will be filled in as implementation progresses._
+### Code files (updated 2026-05-02)
+| File | Status | Description |
+|------|--------|-------------|
+| `backend/apps/jewellery/__init__.py` | ✅ Created | Jewellery app package |
+| `backend/apps/jewellery/apps.py` | ✅ Created | Django app config |
+| `backend/apps/jewellery/urls.py` | ✅ Modified | Registered `system/bootstrap` + B-1.2 master routes |
+| `backend/apps/jewellery/models/__init__.py` | ✅ Created | Base model export |
+| `backend/apps/jewellery/models/base.py` | ✅ Created | `JewelleryBaseModel` abstract model |
+| `backend/apps/jewellery/permissions.py` | ✅ Created | `JewelleryFeatureGuard`, `HasJewelleryPermission` |
+| `backend/apps/jewellery/services/__init__.py` | ✅ Created | Services package init |
+| `backend/apps/jewellery/tests/__init__.py` | ✅ Created | Tests package init |
+| `backend/apps/jewellery/migrations/__init__.py` | ✅ Created | Migrations package init |
+| `backend/apps/jewellery/models/master.py` | ✅ Modified | Implemented B-1.2 master models |
+| `backend/apps/jewellery/models/inventory.py` | ✅ Created | B-1.3 placeholder file |
+| `backend/apps/jewellery/models/billing.py` | ✅ Created | B-1.5 placeholder file |
+| `backend/apps/jewellery/models/rates.py` | ✅ Created | B-1.4 placeholder file |
+| `backend/apps/jewellery/models/karigar.py` | ✅ Created | Phase 2 placeholder file |
+| `backend/apps/jewellery/models/accounts.py` | ✅ Created | Phase 2 placeholder file |
+| `backend/apps/jewellery/models/gst.py` | ✅ Created | Phase 2 placeholder file |
+| `backend/apps/jewellery/models/pledge.py` | ✅ Created | Phase 2 placeholder file |
+| `backend/apps/jewellery/models/notifications.py` | ✅ Created | Phase 2 placeholder file |
+| `backend/apps/jewellery/serializers/__init__.py` | ✅ Created | Serializers package |
+| `backend/apps/jewellery/serializers/master.py` | ✅ Created | B-1.2 serializers |
+| `backend/apps/jewellery/serializers/system.py` | ✅ Created | Bootstrap response serializer |
+| `backend/apps/jewellery/views/__init__.py` | ✅ Created | Views package |
+| `backend/apps/jewellery/views/master.py` | ✅ Created | B-1.2 viewsets |
+| `backend/apps/jewellery/views/system.py` | ✅ Created | `JewelleryBootstrapView` |
+| `backend/apps/jewellery/tests/test_system_api.py` | ✅ Created | Integration tests for bootstrap endpoint |
+| `backend/apps/jewellery/tests/test_master.py` | ✅ Created | B-1.2 tests (category tree, seed idempotency) |
+| `backend/apps/jewellery/management/commands/seed_jewellery_defaults.py` | ✅ Created | Tenant-wise default master seeding command |
+| `backend/apps/jewellery/migrations/0001_initial.py` | ✅ Created | Initial jewellery migration (B-1.2 models) |
+| `backend/config/settings/base.py` | ✅ Modified | Added `apps.jewellery` to `INSTALLED_APPS` |
+| `backend/config/urls.py` | ✅ Modified | Added jewellery API include and user module self-activation route |
+| `backend/apps/users/serializers.py` | ✅ Modified | Added `view:jewellery` to admin/collector permissions |
+| `backend/apps/users/views.py` | ✅ Modified | Added `POST /api/users/modules/activate/` for self-service module activation and jewellery owner-role assignment |
+| `frontend/src/store/jewellery-api.ts` | ✅ Created | Jewellery RTK Query slice (bootstrap endpoint) |
+| `frontend/src/app/jewellery/layout.tsx` | ✅ Created | Module shell + route guard (feature/permission redirect removed) |
+| `frontend/src/app/jewellery/page.tsx` | ✅ Created | Redirects to dashboard |
+| `frontend/src/app/jewellery/dashboard/page.tsx` | ✅ Modified | Upgraded to structured SaaS dashboard layout (KPI, overview, task/activity, module quick links) while keeping bootstrap integration |
+| `frontend/src/components/jewellery/shared/ModulePlaceholder.tsx` | ✅ Modified | Replaced sparse placeholder card with full-width SaaS workspace template (header action, KPI row, table panel, side insights) + feature/sub-feature specific presets (including table-only and blank-state variants) |
+| `frontend/src/app/jewellery/billing/page.tsx` | ✅ Modified | `?view`-driven sub-feature mapping (Tax invoice, Estimate, Sale return, Old gold, etc.) with contextual headers/presets |
+| `frontend/src/app/jewellery/inventory/page.tsx` | ✅ Modified | `?view`-driven sub-feature mapping (Item master, Purity, Stock-take, Chain of custody, etc.) with contextual headers/presets |
+| `frontend/src/app/jewellery/master/page.tsx` | ✅ Created | Placeholder screen |
+| `frontend/src/app/jewellery/customers/page.tsx` | ✅ Created | Placeholder screen |
+| `frontend/src/app/jewellery/karigar/page.tsx` | ✅ Modified | `?view`-driven sub-feature mapping (Customer order, Metal issue voucher, Receipt, Reconciliation, etc.) with contextual headers/presets |
+| `frontend/src/app/jewellery/pledge/page.tsx` | ✅ Modified | Legacy redirect to `/jewellery/gold-pledge` |
+| `frontend/src/app/jewellery/accounts/page.tsx` | ✅ Created | Placeholder screen |
+| `frontend/src/app/jewellery/gst-reports/page.tsx` | ✅ Modified | Updated subtitle/copy to match SaaS GST report context and reference layout language |
+| `frontend/src/app/jewellery/outstanding/page.tsx` | ✅ Created | Placeholder screen |
+| `frontend/src/app/jewellery/users-roles/page.tsx` | ✅ Created | Placeholder screen |
+| `frontend/src/app/jewellery/multi-branch/page.tsx` | ✅ Created | Placeholder screen |
+| `frontend/src/app/jewellery/barcode-rfid/page.tsx` | ✅ Created | Placeholder screen |
+| `frontend/src/app/jewellery/notifications/page.tsx` | ✅ Created | Placeholder screen |
+| `frontend/src/app/jewellery/mobile/page.tsx` | ✅ Created | Placeholder screen |
+| `frontend/src/app/jewellery/gold-pledge/page.tsx` | ✅ Modified | Keeps module title while mapping `?view` sub-features to contextual presets |
+| `frontend/src/app/jewellery/reports/page.tsx` | ✅ Created | Placeholder screen |
+| `frontend/src/app/jewellery/settings/rates/page.tsx` | ✅ Created | Placeholder screen |
+| `frontend/src/app/jewellery/admin/page.tsx` | ✅ Created | Placeholder screen |
+| `frontend/src/features/jewellery/jewellery-api.ts` | ✅ Created | Re-export for feature-level imports |
+| `frontend/src/lib/routes.ts` | ✅ Modified | Added jewellery route constants; Notes/Udhaar continue using existing root routes |
+| `frontend/src/lib/moduleNav.ts` | ✅ Modified | Added jewellery context/meta; Notes/Udhaar keep existing module menu routes |
+| `frontend/src/hooks/useRoleAccess.ts` | ✅ Modified | Added `view:jewellery` permission |
+| `frontend/src/components/layout/Sidebar.tsx` | ✅ Modified | In Jewellery routes, sidebar now follows module-first IA (Overview, Modules 1-8, Modules 9-15) with feature-level expand/collapse, nested sub-feature lists, and query-aware active-state matching |
+| `frontend/src/components/layout/BottomNav.tsx` | ✅ Modified | Shows jewellery tab without feature-flag hiding |
+| `frontend/src/components/layout/MobileNavDrawer.tsx` | ✅ Modified | Mobile drawer mirrors Jewellery module-first feature/sub-feature tree with query-aware active-state matching; keeps previous app-group behavior outside module context |
+| `frontend/src/components/layout/AuthBootstrap.tsx` | ✅ Modified | Public-route authenticated redirect now lands regular app users on `/udhaarbook` |
+| `frontend/src/features/auth/auth-api.ts` | ✅ Modified | Added `activateModule` mutation used by Modules cards before navigation |
+| `frontend/src/store/api.ts` | ✅ Modified | Added `Jewellery` RTK tag type |
+| `frontend/src/app/modules/page.tsx` | ✅ Modified | Re-styled as full-width structured SaaS modules screen using shared `Screen` layout; plain cards retained (no status labels/messages) |
+| `frontend/src/components/layout/Screen.tsx` | ✅ Modified | Sticky header now uses responsive dynamic top offset so page header aligns correctly when desktop utility header is hidden/shown |
+| `frontend/src/components/layout/AppShell.tsx` | ✅ Modified | Desktop utility header auto-hides when unused (no search/notifications), removing unnecessary blank top space |
+| `frontend/src/app/globals.css` | ✅ Modified | Updated `.app-container` to wide responsive workspace spacing (reduced unnecessary side whitespace) |
+| `frontend/src/app/loans/dashboard/page.tsx` | ✅ Modified | Module switch cards keep Notes/Udhaar on existing routes |
+| `frontend/src/app/login/page.tsx` | ✅ Modified | Post-login redirect now defaults regular app users to `/udhaarbook` |
+| `frontend/src/components/layout/RouteGuard.tsx` | ✅ Modified | Default role redirect now points regular app users to `/udhaarbook` |
+| `frontend/src/app/signup/page.tsx` | ✅ Modified | Post-signup redirect now defaults regular app users to `/udhaarbook` |
+| `frontend/src/app/reset-password/page.tsx` | ✅ Modified | Post-reset redirect now defaults regular app users to `/udhaarbook` |
+| `frontend/src/app/page.tsx` | ✅ Modified | Landing copy updated for modular SaaS + phased integrations message |
+| `frontend/src/components/home/FeatureGrid.tsx` | ✅ Modified | SaaS roadmap language with simplified UI labels (no Core/Add-on badges) |
+| `frontend/src/app/onboarding/page.tsx` | ✅ Modified | Onboarding success copy now explains included core apps + future add-ons |
+| `frontend/src/app/settings/page.tsx` | ✅ Modified | Added SaaS-style Workspace & Access section with simplified app grouping labels |
 
 ---
 
@@ -123,7 +273,7 @@ _Will be filled in as implementation progresses._
 ### BACKEND TASKS
 
 #### B-1.1 — Django App Bootstrap
-**Status:** ⏳ Pending  
+**Status:** ✅ Done  
 **Files to create:**
 ```
 backend/apps/jewellery/__init__.py
@@ -135,21 +285,21 @@ backend/apps/jewellery/services/__init__.py
 backend/apps/jewellery/tests/__init__.py
 ```
 **Files to modify:**
-- `backend/config/settings.py` — add `'apps.jewellery'` to `INSTALLED_APPS`
+- `backend/config/settings/base.py` — add `'apps.jewellery'` to `INSTALLED_APPS`
 - `backend/config/urls.py` — add `path('api/jwl/v1/', include('apps.jewellery.urls'))`
 
 **Checklist:**
-- [ ] App created and registered
-- [ ] `JewelleryBaseModel` abstract model created (see `02-database-schema.md §Base Model`)
-- [ ] `JewelleryFeatureGuard` permission class created
-- [ ] `HasJewelleryPermission(code)` permission class created
-- [ ] URL namespace `/api/jwl/v1/` registered
-- [ ] `python manage.py check` passes with no errors
+- [x] App created and registered
+- [x] `JewelleryBaseModel` abstract model created (see `02-database-schema.md §Base Model`)
+- [x] `JewelleryFeatureGuard` permission class created
+- [x] `HasJewelleryPermission(code)` permission class created
+- [x] URL namespace `/api/jwl/v1/` registered
+- [x] `python manage.py check` passes with no errors
 
 ---
 
 #### B-1.2 — Master Data Models (Module 3)
-**Status:** ⏳ Pending  
+**Status:** ✅ Done  
 **Depends on:** B-1.1  
 **Files to create:**
 ```
@@ -162,18 +312,18 @@ backend/apps/jewellery/management/commands/seed_jewellery_defaults.py
 _(See exact field definitions in `02-database-schema.md §Master Data`)_
 
 **Checklist:**
-- [ ] `Metal`, `Purity` models created (read-only; seeded by management command)
-- [ ] `Category` model created (self-referencing tree via `parent` FK)
-- [ ] `Design` model created (`image_urls` JSONField, `bom` JSONField)
-- [ ] `TaxSlab` model created (with `effective_from`, `effective_to`)
-- [ ] `NumberSeries` model created (with `prefix`, `next_number`, `padding`)
-- [ ] Initial migration created and tested
-- [ ] `seed_jewellery_defaults` command seeds: GOLD/SILVER/PLAT metals, all purities, default tax slabs (3%/5%/18%), default number series
-- [ ] CRUD ViewSets for Category, Design, TaxSlab, NumberSeries
-- [ ] GET-only endpoints for Metal, Purity
-- [ ] All endpoints require `JewelleryFeatureGuard`
-- [ ] Unit test: category tree returns parent→child correctly
-- [ ] Unit test: seed command is idempotent (safe to run twice)
+- [x] `Metal`, `Purity` models created (read-only; seeded by management command)
+- [x] `Category` model created (self-referencing tree via `parent` FK)
+- [x] `Design` model created (`image_urls` JSONField, `bom` JSONField)
+- [x] `TaxSlab` model created (with `effective_from`, `effective_to`)
+- [x] `NumberSeries` model created (with `prefix`, `next_number`, `padding`)
+- [x] Initial migration created and tested
+- [x] `seed_jewellery_defaults` command seeds: GOLD/SILVER/PLAT metals, all purities, default tax slabs (3%/5%/18%), default number series
+- [x] CRUD ViewSets for Category, Design, TaxSlab, NumberSeries
+- [x] GET-only endpoints for Metal, Purity
+- [x] All endpoints require `JewelleryFeatureGuard`
+- [x] Unit test: category tree returns parent→child correctly
+- [x] Unit test: seed command is idempotent (safe to run twice)
 
 ---
 
@@ -312,7 +462,7 @@ backend/apps/jewellery/views/admin.py
 ### FRONTEND TASKS
 
 #### F-1.1 — Module Shell & Routing
-**Status:** ⏳ Pending  
+**Status:** ✅ Done  
 **Depends on:** B-1.1 (API must respond to auth checks)  
 **Files to create:**
 ```
@@ -327,14 +477,14 @@ frontend/src/store/jewellery-api.ts           ← RTK Query slice base
 - `frontend/src/app/modules/page.tsx` — add Jewellery ERP card (feature-flagged)
 
 **Checklist:**
-- [ ] `/jewellery` route tree created in Next.js app router
-- [ ] `jewelleryApi` RTK slice created (base URL `/api/jwl/v1/`)
-- [ ] Feature flag guard: if `tenant.feature_flags.jewellery !== true`, redirect to `/modules`
-- [ ] Sidebar: jewellery section with all 15 sub-module nav items (collapsed by default)
-- [ ] Sidebar nav matches structure from `digikhaato_jewellery_sidebar.html`
-- [ ] Module card on `/modules` page shows Jewellery ERP (gold icon, feature-flag-gated)
-- [ ] Dashboard page renders 4 KPI cards (stubs with loading state)
-- [ ] Mobile bottom nav: jewellery module entry
+- [x] `/jewellery` route tree created in Next.js app router
+- [x] `jewelleryApi` RTK slice created (base URL `/api/jwl/v1/`)
+- [x] Initial feature-flag guard was implemented in F-1.1; later UX pass removed frontend hard-redirect to allow module self-start flow
+- [x] Sidebar: jewellery section with all 15 sub-module nav items (collapsed by default)
+- [x] Sidebar nav matches structure from `digikhaato_jewellery_sidebar.html`
+- [x] Module card on `/modules` page shows Jewellery ERP (gold icon; currently shown as plain selectable card)
+- [x] Dashboard page renders 4 KPI cards (stubs with loading state)
+- [x] Mobile bottom nav: jewellery module entry
 
 ---
 
