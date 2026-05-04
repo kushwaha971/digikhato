@@ -1,11 +1,34 @@
 import os
 from datetime import timedelta
 from pathlib import Path
+from urllib.parse import urlparse
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "change-me")
 DEBUG = False
-ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "*").split(",")
+
+
+def _parse_csv_env(name: str, default: str) -> list[str]:
+    raw = os.getenv(name, default)
+    values: list[str] = []
+    for item in raw.split(","):
+        cleaned = item.strip().lstrip("=")
+        if cleaned:
+            values.append(cleaned)
+    return values
+
+
+def _parse_cors_allowed_origins() -> list[str]:
+    origins: list[str] = []
+    for origin in _parse_csv_env("CORS_ALLOWED_ORIGINS", "http://localhost:3000"):
+        parsed = urlparse(origin)
+        if parsed.scheme and parsed.netloc:
+            origins.append(origin)
+    # Keep a safe local default if all provided values are malformed
+    return origins or ["http://localhost:3000","digikhaato.com","www.digikhaato.com","https://digikhaato.com","backend","api.digikhaato.com"]
+
+
+ALLOWED_HOSTS = _parse_csv_env("DJANGO_ALLOWED_HOSTS", "*")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -123,6 +146,6 @@ CACHES = {
     }
 }
 
-CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+CORS_ALLOWED_ORIGINS = _parse_cors_allowed_origins()
 # Required so the browser sends the httpOnly refresh_token cookie cross-origin
 CORS_ALLOW_CREDENTIALS = True
