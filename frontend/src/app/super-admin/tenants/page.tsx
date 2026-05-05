@@ -24,6 +24,10 @@ import {
   useToggleTeamMemberStatusMutation,
   useUpdateTeamMemberMutation,
 } from "@/features/team/team-api";
+import {
+  useGetTenantModulesQuery,
+  useUpdateTenantModuleMutation,
+} from "@/features/module-access/module-access-api";
 import { ROUTES } from "@/lib/routes";
 import { requiredTrimmedString } from "@/validation/common";
 import type { AuthUser } from "@/store/auth-slice";
@@ -38,6 +42,64 @@ const editSchema = Yup.object({
     .notRequired(),
 });
 
+const MODULE_LABELS: Record<string, string> = {
+  loans: "Loan Management",
+  udhaar: "UdhaarBook",
+  jewellery: "Jewellery ERP",
+};
+
+function TenantModuleToggles({ tenantId }: Readonly<{ tenantId: number }>) {
+  const { data, isLoading } = useGetTenantModulesQuery(tenantId);
+  const [updateModule, { isLoading: isUpdating }] = useUpdateTenantModuleMutation();
+  const [pendingModule, setPendingModule] = useState<string | null>(null);
+
+  if (isLoading) {
+    return <p className="text-xs text-muted">Loading modules…</p>;
+  }
+
+  const modules = data?.modules ?? [];
+
+  const handleToggle = async (module: string, currentlyEnabled: boolean) => {
+    setPendingModule(module);
+    try {
+      await updateModule({ tenantId, module, action: currentlyEnabled ? "revoke" : "grant" }).unwrap();
+    } finally {
+      setPendingModule(null);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      {modules.map((mod) => {
+        const isPending = pendingModule === mod.module && isUpdating;
+        return (
+          <div key={mod.module} className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
+            <div>
+              <p className="text-sm font-medium text-text">{MODULE_LABELS[mod.module] ?? mod.label}</p>
+              {mod.enabled ? (
+                <p className="text-xs text-success-600 font-medium">Access granted</p>
+              ) : (
+                <p className="text-xs text-muted">Not enabled</p>
+              )}
+            </div>
+            <Button
+              size="xs"
+              variant={mod.enabled ? "ghost" : "success"}
+              fullWidth={false}
+              onClick={() => handleToggle(mod.module, mod.enabled)}
+              loading={isPending}
+              disabled={isUpdating}
+              type="button"
+            >
+              {mod.enabled ? "Revoke" : "Grant"}
+            </Button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function TenantsPage() {
   const router = useRouter();
   const { data: allMembers, isLoading } = useGetTeamMembersQuery();
@@ -47,6 +109,7 @@ export default function TenantsPage() {
   const [search, setSearch] = useState("");
   const [confirmToggleMember, setConfirmToggleMember] = useState<AuthUser | null>(null);
   const [editMember, setEditMember] = useState<AuthUser | null>(null);
+  const [editTab, setEditTab] = useState<"details" | "modules">("details");
 
   const admins = (allMembers ?? [])
     .filter((m) => m.role === "admin")
@@ -65,6 +128,7 @@ export default function TenantsPage() {
 
   const openEdit = (member: AuthUser) => {
     setEditMember(member);
+    setEditTab("details");
     formik.resetForm({
       values: {
         full_name: member.full_name,
@@ -142,6 +206,17 @@ export default function TenantsPage() {
                 </div>
                 <p className="text-xs text-muted">{admin.mobile_number}</p>
                 {admin.branch_name && <p className="text-xs text-muted">{admin.branch_name}</p>}
+                {admin.feature_flags && (
+                  <div className="flex gap-1 mt-1 flex-wrap">
+                    {Object.entries(admin.feature_flags)
+                      .filter(([, enabled]) => enabled)
+                      .map(([mod]) => (
+                        <span key={mod} className="text-[10px] bg-primary-100 text-primary-700 rounded px-1.5 py-0.5 font-medium">
+                          {MODULE_LABELS[mod] ?? mod}
+                        </span>
+                      ))}
+                  </div>
+                )}
               </div>
               <Badge variant="primary">Admin</Badge>
             </div>
@@ -176,54 +251,96 @@ export default function TenantsPage() {
         onClose={() => setEditMember(null)}
         title="Edit Tenant Admin"
         footer={
-          <>
+          editTab === "details" ? (
+            <>
+              <Button variant="secondary" size="sm" fullWidth={false} onClick={() => setEditMember(null)} type="button">
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                fullWidth={false}
+                loading={formik.isSubmitting || isUpdating}
+                disabled={formik.isSubmitting || isUpdating}
+                type="submit"
+                form="edit-tenant-form"
+              >
+                Save Changes
+              </Button>
+            </>
+          ) : (
             <Button variant="secondary" size="sm" fullWidth={false} onClick={() => setEditMember(null)} type="button">
-              Cancel
+              Close
             </Button>
-            <Button
-              size="sm"
-              fullWidth={false}
-              loading={formik.isSubmitting || isUpdating}
-              disabled={formik.isSubmitting || isUpdating}
-              type="submit"
-              form="edit-tenant-form"
-            >
-              Save Changes
-            </Button>
-          </>
+          )
         }
       >
-        <form id="edit-tenant-form" className="space-y-4" onSubmit={formik.handleSubmit} noValidate>
-          <p className="text-sm text-muted">
-            Update the name or branch for <strong>{editMember?.full_name}</strong>.
-            Mobile and password changes are handled separately.
-          </p>
+        {/* Tab switcher */}
+        <div className="flex rounded-lg border border-border overflow-hidden mb-4">
+          <button
+            type="button"
+            onClick={() => setEditTab("details")}
+            className={`flex-1 py-2 text-sm font-medium transition-colors ${
+              editTab === "details"
+                ? "bg-primary-600 text-white"
+                : "bg-surface text-muted hover:text-text"
+            }`}
+          >
+            Details
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditTab("modules")}
+            className={`flex-1 py-2 text-sm font-medium transition-colors ${
+              editTab === "modules"
+                ? "bg-primary-600 text-white"
+                : "bg-surface text-muted hover:text-text"
+            }`}
+          >
+            Module Access
+          </button>
+        </div>
 
-          <FormErrorBanner message={(formik.status as { formError?: string } | undefined)?.formError} />
+        {editTab === "details" && (
+          <form id="edit-tenant-form" className="space-y-4" onSubmit={formik.handleSubmit} noValidate>
+            <p className="text-sm text-muted">
+              Update the name or branch for <strong>{editMember?.full_name}</strong>.
+            </p>
 
-          <TextInput
-            label="Owner Name"
-            name="full_name"
-            value={formik.values.full_name}
-            onChange={formik.handleChange}
-            onBlur={formik.handleBlur}
-            touched={nameState.touched}
-            error={nameState.error}
-            placeholder="Full name"
-            required
-          />
+            <FormErrorBanner message={(formik.status as { formError?: string } | undefined)?.formError} />
 
-          <TextInput
-            label="Business / Branch Name (optional)"
-            name="branch_name"
-            value={formik.values.branch_name}
-            onChange={formik.handleChange}
-            onBlur={formik.handleBlur}
-            touched={branchState.touched}
-            error={branchState.error}
-            placeholder="e.g. Sharma Finance"
-          />
-        </form>
+            <TextInput
+              label="Owner Name"
+              name="full_name"
+              value={formik.values.full_name}
+              onChange={formik.handleChange}
+              onBlur={formik.handleBlur}
+              touched={nameState.touched}
+              error={nameState.error}
+              placeholder="Full name"
+              required
+            />
+
+            <TextInput
+              label="Business / Branch Name (optional)"
+              name="branch_name"
+              value={formik.values.branch_name}
+              onChange={formik.handleChange}
+              onBlur={formik.handleBlur}
+              touched={branchState.touched}
+              error={branchState.error}
+              placeholder="e.g. Sharma Finance"
+            />
+          </form>
+        )}
+
+        {editTab === "modules" && editMember && (
+          <div className="space-y-3">
+            <p className="text-sm text-muted">
+              Grant or revoke module access for <strong>{editMember.full_name}</strong>. Changes take effect immediately.
+            </p>
+            <TenantModuleToggles tenantId={editMember.id} />
+          </div>
+        )}
       </Drawer>
 
       {/* Activate / Deactivate confirmation */}

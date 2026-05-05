@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { Screen } from "@/components/layout/Screen";
 import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
 import { useActivateModuleMutation, useRequestModuleAccessMutation } from "@/features/auth/auth-api";
 import { APP_MODULES, getModuleLandingRoute, type AppModuleCode } from "@/lib/routes";
 import { getAccessibleModules, isModuleAdmin } from "@/store/auth-slice";
@@ -64,6 +65,8 @@ export default function ModulesPage() {
   const [activateModule, { isLoading: isActivating }] = useActivateModuleMutation();
   const [requestModuleAccess, { isLoading: isRequesting }] = useRequestModuleAccessMutation();
   const [pendingModuleKey, setPendingModuleKey] = useState<AppModuleCode | null>(null);
+  const [requestedModules, setRequestedModules] = useState<Set<AppModuleCode>>(new Set());
+  const [confirmRequestModule, setConfirmRequestModule] = useState<ModuleCard | null>(null);
 
   const accessibleModules = useMemo(() => getAccessibleModules(currentUser), [currentUser]);
 
@@ -78,7 +81,7 @@ export default function ModulesPage() {
     try {
       await activateModule({ module: module.key }).unwrap();
     } catch {
-      // Keep navigation non-blocking if activation endpoint is not required for this module.
+      // Non-blocking — proceed to navigate regardless
     } finally {
       setPendingModuleKey(null);
     }
@@ -89,18 +92,23 @@ export default function ModulesPage() {
     setPendingModuleKey(module.key);
     try {
       await requestModuleAccess({ module: module.key, mode }).unwrap();
+      if (mode === "request") {
+        setRequestedModules((prev) => new Set(prev).add(module.key));
+      }
     } finally {
       setPendingModuleKey(null);
+      setConfirmRequestModule(null);
     }
   };
 
   return (
-    <Screen title="Modules" subtitle="Access modules based on your assigned roles and permissions">
+    <Screen title="Modules" subtitle="Your workspace modules — open active ones or request access to locked ones">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
         {ALL_MODULES.map((module) => {
           const hasAccess = accessibleModules.includes(module.key);
           const isPending = pendingModuleKey === module.key;
           const isModuleAdminUser = hasAccess && isModuleAdmin(currentUser, module.key);
+          const alreadyRequested = requestedModules.has(module.key);
 
           const canRequest = !hasAccess && allowRequestAccess && (
             requestableModules.length === 0 || requestableModules.includes(module.key)
@@ -109,24 +117,48 @@ export default function ModulesPage() {
           const canSelfOnboardByBackend = canSelfOnboardFromModuleAdmin(currentUser?.module_admin, module.key);
           const canSelfOnboard = !hasAccess && (canSelfOnboardByPolicy || canSelfOnboardByBackend);
 
+          const articleClass = hasAccess
+            ? "app-panel rounded-2xl p-5 flex flex-col gap-4 relative"
+            : "app-panel rounded-2xl p-5 flex flex-col gap-4 relative opacity-90";
+
+          const iconClass = hasAccess
+            ? "flex-shrink-0 w-11 h-11 rounded-xl flex items-center justify-center text-lg font-medium"
+            : "flex-shrink-0 w-11 h-11 rounded-xl flex items-center justify-center text-lg font-medium grayscale opacity-60";
+
+          let accessLabel: string;
+          if (hasAccess) {
+            accessLabel = "Access granted";
+          } else if (alreadyRequested) {
+            accessLabel = "Request submitted — awaiting approval";
+          } else {
+            accessLabel = "Access restricted";
+          }
+
           return (
-            <article
-              key={module.key}
-              className="app-panel rounded-2xl p-5 flex flex-col gap-4"
-            >
+            <article key={module.key} className={articleClass}>
+              {/* Lock badge for inaccessible modules */}
+              {hasAccess ? null : (
+                <div className="absolute top-3 right-3 flex items-center gap-1 bg-neutral-100 dark:bg-neutral-800 rounded-full px-2 py-0.5">
+                  <svg className="w-3 h-3 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                  <span className="text-[10px] text-muted font-medium">Locked</span>
+                </div>
+              )}
+
               <div className="flex items-start gap-4">
                 <span
-                  className="flex-shrink-0 w-11 h-11 rounded-xl flex items-center justify-center text-lg font-medium"
+                  className={iconClass}
                   style={{ background: `${module.color}18`, color: module.color }}
                 >
                   {module.icon}
                 </span>
-                <div className="min-w-0">
+                <div className="min-w-0 pr-10">
                   <p className="text-base font-semibold text-text">{module.label}</p>
                   <p className="mt-1 text-sm text-muted leading-relaxed">{module.description}</p>
                   <p className="mt-2 text-xs font-medium text-muted">
-                    {hasAccess ? "Access granted" : "Access not granted"}
-                    {isModuleAdminUser ? " • Module admin" : ""}
+                    {accessLabel}
+                    {isModuleAdminUser ? " · Module admin" : ""}
                   </p>
                 </div>
               </div>
@@ -143,40 +175,89 @@ export default function ModulesPage() {
                 </Button>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {canRequest ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => handleRequestAccess(module, "request")}
-                      loading={isPending && isRequesting}
-                      disabled={isPending}
-                      fullWidth
-                    >
-                      Request access
-                    </Button>
-                  ) : null}
+                  {alreadyRequested ? (
+                    <div className="rounded-xl border border-warning-200 bg-warning-50 px-3 py-2.5 text-sm text-warning-800 font-medium text-center">
+                      Request pending approval
+                    </div>
+                  ) : (
+                    <>
+                      {canRequest && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setConfirmRequestModule(module)}
+                          loading={isPending && isRequesting}
+                          disabled={isPending}
+                          fullWidth
+                        >
+                          Request access
+                        </Button>
+                      )}
 
-                  {canSelfOnboard ? (
-                    <Button
-                      type="button"
-                      onClick={() => handleRequestAccess(module, "self_onboard")}
-                      loading={isPending && isRequesting}
-                      disabled={isPending}
-                      fullWidth
-                    >
-                      Self onboard
-                    </Button>
-                  ) : null}
+                      {canSelfOnboard && (
+                        <Button
+                          type="button"
+                          onClick={() => handleRequestAccess(module, "self_onboard")}
+                          loading={isPending && isRequesting}
+                          disabled={isPending}
+                          fullWidth
+                        >
+                          Self onboard
+                        </Button>
+                      )}
 
-                  {!canRequest && !canSelfOnboard ? (
-                    <p className="text-sm text-muted">Contact your module admin to get access.</p>
-                  ) : null}
+                      {!canRequest && !canSelfOnboard && (
+                        <div className="rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-muted text-center">
+                          Contact your admin to get access
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
             </article>
           );
         })}
       </div>
+
+      {/* Request access confirmation modal */}
+      <Modal
+        open={confirmRequestModule !== null}
+        onClose={() => setConfirmRequestModule(null)}
+        title="Request Module Access"
+        size="sm"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              fullWidth={false}
+              onClick={() => setConfirmRequestModule(null)}
+              type="button"
+              disabled={pendingModuleKey !== null && isRequesting}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              fullWidth={false}
+              type="button"
+              loading={pendingModuleKey === confirmRequestModule?.key && isRequesting}
+              disabled={pendingModuleKey !== null && isRequesting}
+              onClick={() => confirmRequestModule && handleRequestAccess(confirmRequestModule, "request")}
+            >
+              Submit Request
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-muted">
+          You are requesting access to{" "}
+          <strong className="text-text">{confirmRequestModule?.label}</strong>.
+          A notification will be sent to the Super Admin for review.
+          You will be notified once your request is approved or rejected.
+        </p>
+      </Modal>
     </Screen>
   );
 }

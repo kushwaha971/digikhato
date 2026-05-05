@@ -77,6 +77,42 @@ class User(AbstractUser, TimeStampedModel):
         return f"{self.full_name} ({self.mobile_number})"
 
 
+class ModuleAccessRequest(TimeStampedModel):
+    """Tracks tenant/user requests for module access submitted to super admin."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        APPROVED = "approved", "Approved"
+        REJECTED = "rejected", "Rejected"
+
+    user = models.ForeignKey(
+        "users.User",
+        on_delete=models.CASCADE,
+        related_name="module_access_requests",
+    )
+    module = models.CharField(max_length=50, choices=ModuleCode.choices, db_index=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING, db_index=True)
+    rejection_reason = models.TextField(blank=True, default="")
+    reviewed_by = models.ForeignKey(
+        "users.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_module_requests",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["user", "module", "status"]),
+            models.Index(fields=["status", "created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user} → {self.module} [{self.status}]"
+
+
 class UserModuleRole(TimeStampedModel):
     """Maps a user to a role within a specific module (and optionally a branch).
 

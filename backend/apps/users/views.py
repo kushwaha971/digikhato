@@ -10,10 +10,13 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 
+from django.utils import timezone
+
 from apps.common.audit import log_action
 from apps.common.constants import JWL_ROLE_PERMISSIONS, JwlRoleCode, ModuleCode, RoleChoices
+from apps.notifications.models import Notification, NotificationType
 from apps.onboarding.models import BusinessProfile
-from apps.users.models import User, UserModuleRole
+from apps.users.models import ModuleAccessRequest, User, UserModuleRole
 from apps.users.serializers import (
     MobileTokenObtainSerializer,
     PasswordChangeSerializer,
@@ -680,6 +683,36 @@ class ModuleRequestAccessView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        # Check for existing pending request to avoid duplicates
+        existing = ModuleAccessRequest.objects.filter(
+            user=request.user,
+            module=module,
+            status=ModuleAccessRequest.Status.PENDING,
+        ).first()
+
+        if not existing:
+            access_request = ModuleAccessRequest.objects.create(
+                user=request.user,
+                module=module,
+                status=ModuleAccessRequest.Status.PENDING,
+            )
+            # Notify all super admins
+            super_admins = User.objects.filter(role=RoleChoices.SUPER_ADMIN, is_active=True)
+            module_label = dict(ModuleCode.choices).get(module, module)
+            for sa in super_admins:
+                Notification.objects.create(
+                    user=sa,
+                    role=RoleChoices.SUPER_ADMIN,
+                    type=NotificationType.MODULE_ACCESS_REQUEST,
+                    message=f"{request.user.full_name} requested access to {module_label}.",
+                    redirect_target="/super-admin/access-requests",
+                    is_read=False,
+                    is_active=True,
+                    external_key=f"mar:{access_request.pk}:sa:{sa.pk}",
+                )
+        else:
+            access_request = existing
+
         log_action(
             request,
             "request_module_access_pending",
@@ -692,7 +725,8 @@ class ModuleRequestAccessView(APIView):
                 "module": module,
                 "status": "pending_approval",
                 "feature_enabled": False,
-                "detail": "Access request submitted and awaiting module admin approval.",
+                "request_id": access_request.pk,
+                "detail": "Access request submitted and awaiting super admin approval.",
             },
             status=status.HTTP_202_ACCEPTED,
         )
@@ -834,3 +868,245 @@ class ModuleTeamRoleDetailView(APIView):
             detail=f"Module {module}: revoked {role.role_code} from user {role.user_id}",
         )
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def _serialize_reviewer(req):
+    if not req.reviewed_by_id:
+        return None
+    return {"id": req.reviewed_by_id, "full_name": req.reviewed_by.full_name}
+
+
+def _notify_user_module_decision(*, access_request, approved: bool, reason: str = "") -> None:
+    """Create an in-app notification for the requesting user after approve/reject."""
+    module_label = dict(ModuleCode.choices).get(access_request.module, access_request.module)
+    notif_type = (
+        NotificationType.MODULE_ACCESS_APPROVED if approved else NotificationType.MODULE_ACCESS_REJECTED
+    )
+    if approved:
+        message = f"Your request for {module_label} access has been approved."
+    else:
+        message = f"Your request for {module_label} access was rejected."
+        if reason:
+            message += f" Reason: {reason}"
+
+    Notification.objects.create(
+        user=access_request.user,
+        role=access_request.user.role,
+        type=notif_type,
+        message=message,
+        redirect_target="/modules",
+        is_read=False,
+        is_active=True,
+        external_key=f"mar-decision:{access_request.pk}:{'approved' if approved else 'rejected'}",
+    )
+
+
+class ModuleAccessRequestListView(APIView):
+    """
+    GET /api/users/modules/access-requests/
+    Super admin: list all module access requests, optionally filtered by status.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role != RoleChoices.SUPER_ADMIN:
+            raise PermissionDenied("Only super admins can view access requests.")
+
+        qs = ModuleAccessRequest.objects.select_related("user", "reviewed_by").order_by("-created_at")
+        status_filter = request.query_params.get("status")
+        if status_filter and status_filter in ModuleAccessRequest.Status.values:
+            qs = qs.filter(status=status_filter)
+
+        data = []
+        for req in qs:
+            data.append({
+                "id": req.pk,
+                "module": req.module,
+                "module_label": dict(ModuleCode.choices).get(req.module, req.module),
+                "status": req.status,
+                "rejection_reason": req.rejection_reason,
+                "created_at": req.created_at.isoformat(),
+                "reviewed_at": req.reviewed_at.isoformat() if req.reviewed_at else None,
+                "user": {
+                    "id": req.user_id,
+                    "full_name": req.user.full_name,
+                    "mobile_number": req.user.mobile_number,
+                    "role": req.user.role,
+                    "branch_name": req.user.branch_name,
+                },
+                "reviewed_by": _serialize_reviewer(req),
+            })
+        return Response(data)
+
+
+class ModuleAccessRequestApproveView(APIView):
+    """
+    POST /api/users/modules/access-requests/<id>/approve/
+    Super admin: approve a module access request, immediately granting access.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        if request.user.role != RoleChoices.SUPER_ADMIN:
+            raise PermissionDenied("Only super admins can approve access requests.")
+
+        access_request = ModuleAccessRequest.objects.select_related("user").filter(pk=pk).first()
+        if not access_request:
+            return Response(NOT_FOUND, status=status.HTTP_404_NOT_FOUND)
+        if access_request.status != ModuleAccessRequest.Status.PENDING:
+            return Response(
+                {"detail": f"Request is already {access_request.status}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        _activate_module_for_user(actor=request.user, target_user=access_request.user, module=access_request.module)
+
+        access_request.status = ModuleAccessRequest.Status.APPROVED
+        access_request.reviewed_by = request.user
+        access_request.reviewed_at = timezone.now()
+        access_request.save(update_fields=["status", "reviewed_by", "reviewed_at"])
+
+        _notify_user_module_decision(access_request=access_request, approved=True)
+
+        log_action(
+            request,
+            "approve_module_access_request",
+            model_name="ModuleAccessRequest",
+            object_id=access_request.pk,
+            detail=f"Approved {access_request.module} for user {access_request.user_id}",
+        )
+        return Response({"detail": "Access granted.", "module": access_request.module})
+
+
+class ModuleAccessRequestRejectView(APIView):
+    """
+    POST /api/users/modules/access-requests/<id>/reject/
+    Super admin: reject a module access request with a mandatory reason.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        if request.user.role != RoleChoices.SUPER_ADMIN:
+            raise PermissionDenied("Only super admins can reject access requests.")
+
+        reason = str(request.data.get("reason", "")).strip()
+        if not reason:
+            return Response(
+                {"reason": "A rejection reason is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        access_request = ModuleAccessRequest.objects.select_related("user").filter(pk=pk).first()
+        if not access_request:
+            return Response(NOT_FOUND, status=status.HTTP_404_NOT_FOUND)
+        if access_request.status != ModuleAccessRequest.Status.PENDING:
+            return Response(
+                {"detail": f"Request is already {access_request.status}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        access_request.status = ModuleAccessRequest.Status.REJECTED
+        access_request.rejection_reason = reason
+        access_request.reviewed_by = request.user
+        access_request.reviewed_at = timezone.now()
+        access_request.save(update_fields=["status", "rejection_reason", "reviewed_by", "reviewed_at"])
+
+        _notify_user_module_decision(access_request=access_request, approved=False, reason=reason)
+
+        log_action(
+            request,
+            "reject_module_access_request",
+            model_name="ModuleAccessRequest",
+            object_id=access_request.pk,
+            detail=f"Rejected {access_request.module} for user {access_request.user_id}: {reason}",
+        )
+        return Response({"detail": "Request rejected."})
+
+
+class TenantModuleAccessView(APIView):
+    """
+    Super admin manages module access for a specific tenant (admin user).
+
+    GET  /api/super-admin/tenants/<tenant_id>/modules/
+    POST /api/super-admin/tenants/<tenant_id>/modules/
+      body: { "module": "loans|udhaar|jewellery", "action": "grant|revoke" }
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def _require_super_admin(self, request):
+        if request.user.role != RoleChoices.SUPER_ADMIN:
+            raise PermissionDenied("Only super admins can manage tenant module access.")
+
+    def _get_tenant(self, tenant_id):
+        return User.objects.filter(pk=tenant_id, role=RoleChoices.ADMIN).first()
+
+    def get(self, request, tenant_id):
+        self._require_super_admin(request)
+        tenant = self._get_tenant(tenant_id)
+        if not tenant:
+            return Response(NOT_FOUND, status=status.HTTP_404_NOT_FOUND)
+
+        profile = BusinessProfile.objects.filter(owner=tenant).first()
+        feature_flags = dict(profile.feature_flags or {}) if profile else {}
+        modules = []
+        for code, label in ModuleCode.choices:
+            modules.append({
+                "module": code,
+                "label": label,
+                "enabled": bool(feature_flags.get(code, False)),
+            })
+        return Response({"tenant_id": tenant_id, "modules": modules})
+
+    def post(self, request, tenant_id):
+        self._require_super_admin(request)
+        tenant = self._get_tenant(tenant_id)
+        if not tenant:
+            return Response(NOT_FOUND, status=status.HTTP_404_NOT_FOUND)
+
+        module = str(request.data.get("module", "")).strip()
+        action = str(request.data.get("action", "")).strip().lower()
+
+        if not _is_valid_module(module):
+            return Response(
+                {"module": f"Invalid module. Choices: {ModuleCode.values}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if action not in ("grant", "revoke"):
+            return Response(
+                {"action": "Use 'grant' or 'revoke'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        profile, _ = BusinessProfile.objects.get_or_create(owner=tenant)
+        feature_flags = dict(profile.feature_flags or {})
+
+        if action == "grant":
+            _activate_module_for_user(actor=request.user, target_user=tenant, module=module)
+            log_action(request, "grant_tenant_module", model_name="BusinessProfile",
+                       object_id=profile.pk, detail=f"Granted {module} to tenant {tenant_id}")
+        else:
+            feature_flags[module] = False
+            profile.feature_flags = feature_flags
+            profile.save(update_fields=["feature_flags"])
+
+            if module == ModuleCode.JEWELLERY:
+                UserModuleRole.objects.filter(
+                    user__in=User.objects.filter(Q(pk=tenant.pk) | Q(tenant=tenant)),
+                    module=ModuleCode.JEWELLERY,
+                    is_active=True,
+                ).update(is_active=False)
+
+            log_action(request, "revoke_tenant_module", model_name="BusinessProfile",
+                       object_id=profile.pk, detail=f"Revoked {module} from tenant {tenant_id}")
+
+        profile.refresh_from_db()
+        updated_flags = dict(profile.feature_flags or {})
+        modules = [
+            {"module": code, "label": label, "enabled": bool(updated_flags.get(code, False))}
+            for code, label in ModuleCode.choices
+        ]
+        return Response({"tenant_id": tenant_id, "modules": modules})

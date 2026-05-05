@@ -19,6 +19,9 @@ class NotificationType(models.TextChoices):
     ESCALATION = "escalation", "Escalation"
     SYSTEM_UPDATE = "system_update", "System Update"
     LOAN_DUE_ALERT = "loan_due_alert", "Loan Due Alert"
+    MODULE_ACCESS_REQUEST = "module_access_request", "Module Access Request"
+    MODULE_ACCESS_APPROVED = "module_access_approved", "Module Access Approved"
+    MODULE_ACCESS_REJECTED = "module_access_rejected", "Module Access Rejected"
 
 
 class Notification(TimeStampedModel):

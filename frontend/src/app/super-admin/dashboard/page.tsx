@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useGetTeamMembersQuery, useToggleTeamMemberStatusMutation } from "@/features/team/team-api";
+import { useListModuleAccessRequestsQuery } from "@/features/module-access/module-access-api";
 import { Screen } from "@/components/layout/Screen";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -14,6 +15,8 @@ export default function SuperAdminDashboardPage() {
   const { data: allMembers, isLoading } = useGetTeamMembersQuery();
   const [toggleStatus, { isLoading: isToggling }] = useToggleTeamMemberStatusMutation();
   const [confirmToggleTenant, setConfirmToggleTenant] = useState<AuthUser | null>(null);
+  const { data: pendingRequests } = useListModuleAccessRequestsQuery({ status: "pending" });
+  const pendingCount = pendingRequests?.length ?? 0;
 
   const tenants = (allMembers ?? []).filter((m) => m.role === "admin");
   const activeTenants = tenants.filter((m) => m.is_active !== false);
@@ -70,15 +73,20 @@ export default function SuperAdminDashboardPage() {
             <p className="text-xs font-semibold text-text">Manage Tenants</p>
           </Link>
           <Link
-            href="/super-admin/tenants/create"
-            className="app-panel p-4 card-clickable flex flex-col items-center gap-2 text-center"
+            href="/super-admin/access-requests"
+            className="app-panel p-4 card-clickable flex flex-col items-center gap-2 text-center relative"
           >
-            <div className="w-10 h-10 rounded-xl bg-success-100 dark:bg-green-900/30 flex items-center justify-center text-success-600">
+            {pendingCount > 0 && (
+              <span className="absolute top-2 right-2 min-w-[18px] h-[18px] rounded-full bg-danger-500 text-white text-[10px] font-bold flex items-center justify-center px-1">
+                {pendingCount}
+              </span>
+            )}
+            <div className="w-10 h-10 rounded-xl bg-warning-100 dark:bg-yellow-900/30 flex items-center justify-center text-warning-600">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
               </svg>
             </div>
-            <p className="text-xs font-semibold text-text">New Tenant</p>
+            <p className="text-xs font-semibold text-text">Access Requests</p>
           </Link>
         </div>
 

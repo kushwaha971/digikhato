@@ -8,7 +8,6 @@ import { useRouter } from "next/navigation";
 import {
   FormErrorBanner,
   MobileNumberInput,
-  PasswordInput,
   TextInput,
   formikFieldState,
 } from "@/components/forms/system";
@@ -18,7 +17,6 @@ import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import {
-  useChangePasswordMutation,
   useLogoutMutation,
   useUpdateMeMutation,
 } from "@/features/auth/auth-api";
@@ -28,20 +26,16 @@ import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { clearAuth, setCurrentUser } from "@/store/auth-slice";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
-  changePasswordInitialValues,
-  changePasswordValidationSchema,
   focusFirstInvalidField,
   mapBackendErrorsToFormik,
   normalizeMobile,
   profileInitialValues,
   profileValidationSchema,
   trimObjectValues,
-  type ChangePasswordFormValues,
   type ProfileFormValues,
 } from "@/validation";
 
 const PROFILE_FIELDS: Array<keyof ProfileFormValues> = ["full_name", "mobile_number", "branch_name"];
-const PASSWORD_FIELDS: Array<keyof ChangePasswordFormValues> = ["old_password", "new_password", "confirm_password"];
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -52,10 +46,8 @@ export default function SettingsPage() {
 
   const [logout, { isLoading: isLoggingOut }] = useLogoutMutation();
   const [updateMe, { isLoading: isSaving }] = useUpdateMeMutation();
-  const [changePassword, { isLoading: isChangingPw }] = useChangePasswordMutation();
 
   const [profileSaved, setProfileSaved] = useState(false);
-  const [passwordSaved, setPasswordSaved] = useState(false);
   const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
 
   const profileInitial = useMemo<ProfileFormValues>(
@@ -91,41 +83,11 @@ export default function SettingsPage() {
     },
   });
 
-  const passwordFormik = useFormik<ChangePasswordFormValues>({
-    initialValues: changePasswordInitialValues,
-    validationSchema: changePasswordValidationSchema,
-    validateOnBlur: true,
-    validateOnChange: true,
-    onSubmit: async (values, helpers) => {
-      helpers.setStatus(undefined);
-      setPasswordSaved(false);
-      try {
-        await changePassword({
-          old_password: values.old_password,
-          new_password: values.new_password,
-        }).unwrap();
-        helpers.resetForm();
-        setPasswordSaved(true);
-      } catch (error) {
-        const parsed = mapBackendErrorsToFormik(error, helpers, PASSWORD_FIELDS);
-        focusFirstInvalidField(Object.keys(parsed.fieldErrors));
-      } finally {
-        helpers.setSubmitting(false);
-      }
-    },
-  });
-
   useEffect(() => {
     if (!profileSaved) return;
     const timer = setTimeout(() => setProfileSaved(false), 3000);
     return () => clearTimeout(timer);
   }, [profileSaved]);
-
-  useEffect(() => {
-    if (!passwordSaved) return;
-    const timer = setTimeout(() => setPasswordSaved(false), 3000);
-    return () => clearTimeout(timer);
-  }, [passwordSaved]);
 
   const { isAdmin, can } = useRoleAccess();
   const jewelleryEnabled = useFeatureFlag("jewellery");
@@ -168,10 +130,6 @@ export default function SettingsPage() {
   const fullNameState = formikFieldState(profileFormik, "full_name");
   const mobileState = formikFieldState(profileFormik, "mobile_number");
   const branchState = formikFieldState(profileFormik, "branch_name");
-
-  const oldPasswordState = formikFieldState(passwordFormik, "old_password");
-  const newPasswordState = formikFieldState(passwordFormik, "new_password");
-  const confirmPasswordState = formikFieldState(passwordFormik, "confirm_password");
 
   return (
     <Screen title="Settings">
@@ -233,65 +191,6 @@ export default function SettingsPage() {
               type="submit"
             >
               Save Profile
-            </Button>
-          </form>
-        </div>
-
-        <div className="app-panel">
-          <div className="p-4 border-b border-border">
-            <h2 className="font-semibold text-text">Change Password</h2>
-          </div>
-
-          <form className="p-4 space-y-3" onSubmit={passwordFormik.handleSubmit} noValidate>
-            <FormErrorBanner message={(passwordFormik.status as { formError?: string } | undefined)?.formError} />
-
-            <PasswordInput
-              label="Current Password"
-              name="old_password"
-              value={passwordFormik.values.old_password}
-              onChange={passwordFormik.handleChange}
-              onBlur={passwordFormik.handleBlur}
-              touched={oldPasswordState.touched}
-              error={oldPasswordState.error}
-              placeholder="Enter current password"
-              required
-            />
-
-            <PasswordInput
-              label="New Password"
-              name="new_password"
-              value={passwordFormik.values.new_password}
-              onChange={passwordFormik.handleChange}
-              onBlur={passwordFormik.handleBlur}
-              touched={newPasswordState.touched}
-              error={newPasswordState.error}
-              placeholder="New password"
-              helperText="Minimum 8 characters"
-              required
-            />
-
-            <PasswordInput
-              label="Confirm New Password"
-              name="confirm_password"
-              value={passwordFormik.values.confirm_password}
-              onChange={passwordFormik.handleChange}
-              onBlur={passwordFormik.handleBlur}
-              touched={confirmPasswordState.touched}
-              error={confirmPasswordState.error}
-              placeholder="Repeat new password"
-              required
-            />
-
-            {passwordSaved ? <p className="text-xs text-success-600 font-medium">Password changed successfully.</p> : null}
-
-            <Button
-              size="sm"
-              fullWidth={false}
-              loading={passwordFormik.isSubmitting || isChangingPw}
-              disabled={passwordFormik.isSubmitting || isChangingPw}
-              type="submit"
-            >
-              Change Password
             </Button>
           </form>
         </div>

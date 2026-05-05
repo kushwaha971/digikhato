@@ -65,6 +65,7 @@ export const ROUTES = {
     superAdmin: {
       dashboard: "/super-admin/dashboard",
       tenants: "/super-admin/tenants",
+      accessRequests: "/super-admin/access-requests",
     },
   },
 } as const;

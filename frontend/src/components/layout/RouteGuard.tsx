@@ -1,11 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
-import { ForceResetPasswordFormModal } from "@/components/auth/ForceResetPasswordFormModal";
-import { ForceResetPasswordModal } from "@/components/auth/ForceResetPasswordModal";
-import { useChangePasswordMutation, useGetMeQuery } from "@/features/auth/auth-api";
+import { useGetMeQuery } from "@/features/auth/auth-api";
 import { type AppRole } from "@/hooks/useRoleAccess";
 import { getModuleFromPath, getModuleLandingRoute, ROUTES } from "@/lib/routes";
 import { getAccessibleModules, resolveDefaultModule, setAccessToken, setCurrentUser, type AuthUser } from "@/store/auth-slice";
@@ -15,10 +13,6 @@ interface RouteGuardProps {
   readonly children: React.ReactNode;
   readonly requiredRoles?: AppRole[];
   readonly redirectTo?: string;
-}
-
-function getResetPromptDismissKey(userId: number): string {
-  return `reset_prompt_dismissed:${userId}`;
 }
 
 function getDefaultRedirect(user: AuthUser): string {
@@ -33,11 +27,8 @@ export function RouteGuard({ children, requiredRoles, redirectTo }: RouteGuardPr
   const router = useRouter();
   const dispatch = useAppDispatch();
   const { accessToken, currentUser } = useAppSelector((state) => state.auth);
-  const [changePassword, { isLoading: isChangingPassword }] = useChangePasswordMutation();
   const [bootstrappedToken, setBootstrappedToken] = useState<string | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
-  const [isResetFormOpen, setIsResetFormOpen] = useState(false);
-  const [isResetPromptDismissed, setIsResetPromptDismissed] = useState(false);
   const effectiveToken = accessToken ?? bootstrappedToken;
 
   const { data: me, isError: meError } = useGetMeQuery(undefined, {
@@ -45,11 +36,11 @@ export function RouteGuard({ children, requiredRoles, redirectTo }: RouteGuardPr
   });
 
   useEffect(() => {
-    if (typeof window === "undefined") {
+    if (globalThis.window === undefined) {
       return;
     }
 
-    setBootstrappedToken(window.localStorage.getItem("accessToken"));
+    setBootstrappedToken(globalThis.localStorage.getItem("accessToken"));
     setIsHydrated(true);
   }, []);
 
@@ -72,8 +63,8 @@ export function RouteGuard({ children, requiredRoles, redirectTo }: RouteGuardPr
 
     dispatch(setAccessToken(null));
     dispatch(setCurrentUser(null));
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem("accessToken");
+    if (globalThis.window !== undefined) {
+      globalThis.localStorage.removeItem("accessToken");
     }
     router.replace(ROUTES.public.login);
   }, [dispatch, meError, router]);
@@ -124,53 +115,6 @@ export function RouteGuard({ children, requiredRoles, redirectTo }: RouteGuardPr
     }
   }, [isHydrated, effectiveToken, currentUser, requiredRoles, router, redirectTo, pathname]);
 
-  const shouldForcePasswordReset = useMemo(() => {
-    return Boolean(currentUser?.must_reset_password);
-  }, [currentUser?.must_reset_password]);
-
-  useEffect(() => {
-    if (!shouldForcePasswordReset) {
-      if (typeof window !== "undefined" && currentUser?.id) {
-        window.localStorage.removeItem(getResetPromptDismissKey(currentUser.id));
-      }
-      setIsResetFormOpen(false);
-      setIsResetPromptDismissed(false);
-      return;
-    }
-
-    if (typeof window === "undefined" || !currentUser?.id) {
-      return;
-    }
-
-    const dismissed = window.localStorage.getItem(getResetPromptDismissKey(currentUser.id)) === "1";
-    setIsResetPromptDismissed(dismissed);
-  }, [shouldForcePasswordReset, currentUser?.id]);
-
-  const handleResetPromptCancel = useCallback(() => {
-    if (typeof window !== "undefined" && currentUser?.id) {
-      window.localStorage.setItem(getResetPromptDismissKey(currentUser.id), "1");
-    }
-    setIsResetPromptDismissed(true);
-    setIsResetFormOpen(false);
-  }, [currentUser?.id]);
-
-  const handleResetNow = useCallback(() => {
-    setIsResetFormOpen(true);
-  }, []);
-
-  const handleResetPasswordSubmit = useCallback(async (
-    values: { old_password: string; new_password: string },
-  ) => {
-    await changePassword(values).unwrap();
-    if (typeof window !== "undefined" && currentUser?.id) {
-      window.localStorage.removeItem(getResetPromptDismissKey(currentUser.id));
-    }
-    if (currentUser) {
-      dispatch(setCurrentUser({ ...currentUser, must_reset_password: false }));
-    }
-    setIsResetFormOpen(false);
-  }, [changePassword, currentUser, dispatch]);
-
   if (!isHydrated) {
     return null;
   }
@@ -187,20 +131,5 @@ export function RouteGuard({ children, requiredRoles, redirectTo }: RouteGuardPr
     return null;
   }
 
-  return (
-    <>
-      {children}
-      <ForceResetPasswordModal
-        open={shouldForcePasswordReset && !isResetFormOpen && !isResetPromptDismissed}
-        onResetNow={handleResetNow}
-        onCancel={handleResetPromptCancel}
-      />
-      <ForceResetPasswordFormModal
-        open={shouldForcePasswordReset && isResetFormOpen}
-        onBack={() => setIsResetFormOpen(false)}
-        onSubmit={handleResetPasswordSubmit}
-        isSubmitting={isChangingPassword}
-      />
-    </>
-  );
+  return <>{children}</>;
 }

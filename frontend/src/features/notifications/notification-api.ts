@@ -23,7 +23,10 @@ export interface Notification {
     | "system_activity"
     | "escalation"
     | "system_update"
-    | "loan_due_alert";
+    | "loan_due_alert"
+    | "module_access_request"
+    | "module_access_approved"
+    | "module_access_rejected";
   message: string;
   redirect_target: string;
   due_date: string | null;
