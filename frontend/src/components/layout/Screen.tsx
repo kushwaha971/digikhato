@@ -21,7 +21,7 @@ interface ScreenProps {
 
 export function Screen({ title, subtitle, breadcrumb, actions, children, noPadding = false, fullWidth = false, backHref }: ScreenProps) {
   const containerClass = fullWidth ? "w-full px-4 sm:px-6 lg:px-8" : "app-container";
-  const contentClass = noPadding ? "flex-1" : `flex-1 ${containerClass} py-5 md:py-7`;
+  const contentClass = noPadding ? "flex-1" : `flex-1 ${containerClass} py-4 md:py-6`;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -29,12 +29,12 @@ export function Screen({ title, subtitle, breadcrumb, actions, children, noPaddi
       {(title || subtitle || breadcrumb || actions) && (
         <div className="sticky top-16 lg:top-[var(--desktop-screen-top,0px)] z-20 bg-canvas border-b border-border shadow-sm flex-shrink-0">
           <div className={containerClass}>
-            <div className="py-4 flex flex-row items-center justify-between gap-2 min-w-0 overflow-hidden">
-              <div className="min-w-0 flex items-center gap-2 flex-1 overflow-hidden">
+            <div className="py-3 md:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 min-w-0">
+              <div className="min-w-0 flex items-start sm:items-center gap-2 flex-1">
                 {backHref && (
                   <PageBackButton fallbackHref={backHref} />
                 )}
-                <div className="min-w-0 overflow-hidden">
+                <div className="min-w-0">
                   {breadcrumb && breadcrumb.length > 0 && (
                     <nav className="flex items-center gap-1 mb-0.5 overflow-hidden" aria-label="Breadcrumb">
                       {breadcrumb.map((item) => (
@@ -56,13 +56,15 @@ export function Screen({ title, subtitle, breadcrumb, actions, children, noPaddi
                     </nav>
                   )}
                   {title && (
-                    <h1 className="text-lg md:text-2xl font-bold text-text truncate leading-tight">{title}</h1>
+                    <h1 className="text-lg md:text-2xl font-bold text-text leading-tight break-words">{title}</h1>
                   )}
-                  {subtitle ? <p className="text-sm text-muted mt-1 truncate">{subtitle}</p> : null}
+                  {subtitle ? <p className="text-sm text-muted mt-1 leading-snug break-words">{subtitle}</p> : null}
                 </div>
               </div>
               {actions && (
-                <div className="flex items-center gap-2 flex-shrink-0 min-w-0">{actions}</div>
+                <div className="w-full sm:w-auto flex items-center sm:justify-end gap-2 flex-wrap sm:flex-nowrap min-w-0">
+                  {actions}
+                </div>
               )}
             </div>
           </div>

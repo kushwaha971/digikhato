@@ -5,7 +5,7 @@ import { Screen } from "@/components/layout/Screen";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Modal } from "@/components/ui/Modal";
-import { SelectInput } from "@/components/forms/system";
+import { Select } from "@/components/ui/Select";
 import {
   useAssignModuleTeamRoleMutation,
   useGetModuleTeamRolesQuery,
@@ -131,9 +131,8 @@ export default function JewelleryUsersRolesPage() {
         )}
       >
         <div className="space-y-4">
-          <SelectInput
+          <Select
             label="Team member"
-            name="user_id"
             value={selectedUserId}
             onChange={(event) => setSelectedUserId(event.target.value)}
           >
@@ -143,11 +142,10 @@ export default function JewelleryUsersRolesPage() {
                 {member.full_name} ({member.mobile_number})
               </option>
             ))}
-          </SelectInput>
+          </Select>
 
-          <SelectInput
+          <Select
             label="JWL role"
-            name="role_code"
             value={selectedRoleCode}
             onChange={(event) => setSelectedRoleCode(event.target.value)}
           >
@@ -156,7 +154,7 @@ export default function JewelleryUsersRolesPage() {
                 {role.label}
               </option>
             ))}
-          </SelectInput>
+          </Select>
         </div>
       </Modal>
     </Screen>

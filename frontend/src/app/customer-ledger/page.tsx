@@ -6,6 +6,7 @@ import { Screen } from "@/components/layout/Screen";
 import { Drawer } from "@/components/ui/Drawer";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
 import { SkeletonList } from "@/components/ui/Skeleton";
 import {
   useListLedgerCustomersQuery,
@@ -284,17 +285,13 @@ export default function UdharBookPage() {
         <div className="flex flex-col gap-4">
           <Input label="Name" required value={name} onChange={(e) => setName(e.target.value)} error={nameErr} placeholder="e.g. Ramesh Kumar" autoFocus />
           <Input label="Mobile (optional)" value={mobile} onChange={(e) => setMobile(e.target.value)} placeholder="10-digit number" type="tel" />
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="party-address" className="text-sm font-medium text-text">Address <span className="text-muted font-normal">(optional)</span></label>
-            <textarea
-              id="party-address"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder="Street, city, state…"
-              rows={3}
-              className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-text placeholder:text-muted resize-none focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-400 transition-colors"
-            />
-          </div>
+          <Textarea
+            label="Address (optional)"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            placeholder="Street, city, state…"
+            rows={3}
+          />
         </div>
       </Drawer>
     </Screen>

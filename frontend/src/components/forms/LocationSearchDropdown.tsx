@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { Input } from "@/components/ui/Input";
+
 import { useListLocationsQuery, type Location } from "@/features/locations/location-api";
 
 type Props = {
@@ -120,13 +122,12 @@ export function LocationSearchDropdown({ value, onChange, onBlur, label = "Locat
       {open && (
         <div className="absolute z-50 mt-1 w-full max-w-sm rounded-xl border border-border bg-surface shadow-lg overflow-hidden">
           <div className="p-2 border-b border-border">
-            <input
+            <Input
               ref={inputRef}
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Type to search locations…"
-              className="w-full bg-transparent text-sm text-text placeholder:text-muted/70 px-2 py-1.5 focus:outline-none"
             />
           </div>
 

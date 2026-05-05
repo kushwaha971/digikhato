@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Screen } from "@/components/layout/Screen";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
 import { useCreateNoteMutation } from "@/features/notes/notes-api";
 
 export default function NewNotePage() {
@@ -47,15 +48,14 @@ export default function NewNotePage() {
           autoFocus
         />
 
-        <div>
-          <label className="block text-sm font-medium text-text mb-1.5">Content</label>
-          <textarea
-            className="w-full border border-border bg-surface rounded-xl px-3 py-2.5 text-sm text-text placeholder:text-muted resize-none focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all duration-150 min-h-[200px]"
-            placeholder="Write something..."
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-          />
-        </div>
+        <Textarea
+          label="Content"
+          placeholder="Write something..."
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          rows={10}
+          className="min-h-[200px]"
+        />
       </div>
     </Screen>
   );

@@ -67,6 +67,8 @@ html {
   text-rendering: optimizeLegibility;
   overflow-x: hidden;
   max-width: 100%;
+  /* Responsive base: 13px mobile → 16px desktop (smooth clamp) */
+  font-size: clamp(13px, 0.5vw + 11.125px, 16px);
 }
 
 body {
@@ -217,7 +219,7 @@ body {
 
 .data-table th {
   text-align: left;
-  font-size: 0.7rem;
+  font-size: clamp(0.625rem, 0.55rem + 0.1vw, 0.7rem);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -230,7 +232,7 @@ body {
 .data-table td {
   padding: 0.875rem 1rem;
   border-bottom: 1px solid var(--border);
-  font-size: 0.875rem;
+  font-size: clamp(0.8rem, 0.75rem + 0.1vw, 0.875rem);
   color: var(--text);
 }
 

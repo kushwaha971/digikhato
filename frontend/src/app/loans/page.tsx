@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useCallback, useState } from "react";
 
+import { Button } from "@/components/ui/Button";
 import { DatePicker } from "@/components/ui/DatePicker";
+import { Input } from "@/components/ui/Input";
 import { Screen } from "@/components/layout/Screen";
 import { Badge } from "@/components/ui/Badge";
 import {
-  FILTER_FIELD_CLASS,
   FilterSelect,
   ResponsiveFilterPanel,
 } from "@/components/ui/ResponsiveFilterPanel";
@@ -91,8 +92,8 @@ export default function LoanListPage() {
       actions={
         <div className="flex items-center gap-2">
           {can("create:loan") ? (
-            <Link href="/loans/create" className="inline-flex items-center px-3 py-1.5 rounded-lg bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700 transition-colors">
-              + Create Loan
+            <Link href="/loans/create">
+              <Button size="sm">+ Create Loan</Button>
             </Link>
           ) : null}
           <ResponsiveFilterPanel
@@ -111,8 +112,8 @@ export default function LoanListPage() {
               ))}
             </FilterSelect>
             <div className="grid grid-cols-2 gap-2">
-              <input type="number" placeholder="Min ₹" value={draftMinAmt} onChange={(e) => setDraftMinAmt(e.target.value)} className={FILTER_FIELD_CLASS} />
-              <input type="number" placeholder="Max ₹" value={draftMaxAmt} onChange={(e) => setDraftMaxAmt(e.target.value)} className={FILTER_FIELD_CLASS} />
+              <Input type="number" placeholder="Min ₹" value={draftMinAmt} onChange={(e) => setDraftMinAmt(e.target.value)} />
+              <Input type="number" placeholder="Max ₹" value={draftMaxAmt} onChange={(e) => setDraftMaxAmt(e.target.value)} />
             </div>
             <div className="grid grid-cols-1 gap-2">
               <DatePicker name="loan_filter_from" label="Start date from" value={draftDateFrom} onChange={(e) => setDraftDateFrom(e.target.value)} />

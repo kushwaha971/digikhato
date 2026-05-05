@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 import { PaymentModeChip } from "@/components/ui/PaymentModeChip";
+import { Input } from "@/components/ui/Input";
 import { ResponsiveFilterPanel } from "@/components/ui/ResponsiveFilterPanel";
 import { SkeletonList } from "@/components/ui/Skeleton";
 import { useListCollectionsQuery } from "@/features/collections/collection-api";
@@ -31,8 +32,6 @@ function fmt(val: string | number | undefined) {
   return Number(val ?? 0).toLocaleString("en-IN");
 }
 
-const FILTER_INPUT_CLASS =
-  "w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent";
 
 // --- CollectionLedgerSection ---
 
@@ -109,8 +108,8 @@ function CollectionLedgerSection({ loan, canAddCollection, onRecordCollection }:
             <DatePicker name="loan_date_from" label="Date from" value={draftDateFrom} onChange={(e) => setDraftDateFrom(e.target.value)} />
             <DatePicker name="loan_date_to" label="Date to" value={draftDateTo} onChange={(e) => setDraftDateTo(e.target.value)} />
             <div className="grid grid-cols-2 gap-2">
-              <input type="number" placeholder="Min ₹" value={draftMinAmt} onChange={(e) => setDraftMinAmt(e.target.value)} className={FILTER_INPUT_CLASS} />
-              <input type="number" placeholder="Max ₹" value={draftMaxAmt} onChange={(e) => setDraftMaxAmt(e.target.value)} className={FILTER_INPUT_CLASS} />
+              <Input type="number" placeholder="Min ₹" value={draftMinAmt} onChange={(e) => setDraftMinAmt(e.target.value)} />
+              <Input type="number" placeholder="Max ₹" value={draftMaxAmt} onChange={(e) => setDraftMaxAmt(e.target.value)} />
             </div>
           </ResponsiveFilterPanel>
         </div>

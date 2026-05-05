@@ -7,7 +7,9 @@ import { Drawer } from "@/components/ui/Drawer";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { SkeletonList } from "@/components/ui/Skeleton";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
 import {
   useGetLedgerCustomerQuery,
   useListLedgerTransactionsQuery,
@@ -171,26 +173,20 @@ function EntryForm({ txMode, form, amountErr, partyName, onChange }: Readonly<En
         error={amountErr}
       />
 
-      <Input
+      <DatePicker
+        name="tx-date"
         label="Date"
-        type="date"
         value={form.date}
         onChange={(e) => onChange({ date: e.target.value })}
       />
 
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="tx-notes" className="text-sm font-medium text-text">
-          Note <span className="text-muted font-normal">(optional)</span>
-        </label>
-        <textarea
-          id="tx-notes"
-          rows={2}
-          value={form.notes}
-          onChange={(e) => onChange({ notes: e.target.value })}
-          placeholder="e.g. grocery, rent, medicine…"
-          className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-text placeholder:text-muted resize-none focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-400 transition-colors"
-        />
-      </div>
+      <Textarea
+        label="Note (optional)"
+        rows={2}
+        value={form.notes}
+        onChange={(e) => onChange({ notes: e.target.value })}
+        placeholder="e.g. grocery, rent, medicine…"
+      />
     </div>
   );
 }

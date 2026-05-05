@@ -8,3 +8,4 @@ export * from "@/validation/settings.validation";
 export * from "@/validation/onboarding.validation";
 export * from "@/validation/account.validation";
 export * from "@/validation/location.validation";
+export * from "@/validation/jewellery/invoice.validation";

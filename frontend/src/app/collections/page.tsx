@@ -8,8 +8,8 @@ import { DatePicker } from "@/components/ui/DatePicker";
 import { PaymentModeChip } from "@/components/ui/PaymentModeChip";
 import { SkeletonList } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Input } from "@/components/ui/Input";
 import {
-  FILTER_FIELD_CLASS,
   FilterSelect,
   ResponsiveFilterPanel,
 } from "@/components/ui/ResponsiveFilterPanel";
@@ -131,10 +131,10 @@ export default function CollectionsPage() {
               <DatePicker name="collections_filter_to" label="Date to" value={draftDateTo} onChange={(e) => setDraftDateTo(e.target.value)} />
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <input type="number" placeholder="Min ₹" value={draftMinAmt} onChange={(e) => setDraftMinAmt(e.target.value)} className={FILTER_FIELD_CLASS} />
-              <input type="number" placeholder="Max ₹" value={draftMaxAmt} onChange={(e) => setDraftMaxAmt(e.target.value)} className={FILTER_FIELD_CLASS} />
+              <Input type="number" placeholder="Min ₹" value={draftMinAmt} onChange={(e) => setDraftMinAmt(e.target.value)} />
+              <Input type="number" placeholder="Max ₹" value={draftMaxAmt} onChange={(e) => setDraftMaxAmt(e.target.value)} />
             </div>
-            <input type="number" placeholder="Collector ID (optional)" value={draftCollectorId} onChange={(e) => setDraftCollectorId(e.target.value)} className={FILTER_FIELD_CLASS} />
+            <Input type="number" placeholder="Collector ID (optional)" value={draftCollectorId} onChange={(e) => setDraftCollectorId(e.target.value)} />
           </ResponsiveFilterPanel>
         ) : undefined
       }

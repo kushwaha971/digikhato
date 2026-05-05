@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Screen } from "@/components/layout/Screen";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SkeletonList } from "@/components/ui/Skeleton";
@@ -132,16 +133,14 @@ export default function NoteDetailPage() {
           placeholder="Note title"
         />
 
-        {/* Body field */}
-        <div>
-          <label className="block text-sm font-medium text-text mb-1.5">Content</label>
-          <textarea
-            className="w-full border border-border bg-surface rounded-xl px-3 py-2.5 text-sm text-text placeholder:text-muted resize-none focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all duration-150 min-h-[200px]"
-            placeholder="Write something..."
-            value={body}
-            onChange={(e) => handleBodyChange(e.target.value)}
-          />
-        </div>
+        <Textarea
+          label="Content"
+          placeholder="Write something..."
+          value={body}
+          onChange={(e) => handleBodyChange(e.target.value)}
+          rows={10}
+          className="min-h-[200px]"
+        />
 
         {/* Last updated */}
         <p className="text-xs text-muted">

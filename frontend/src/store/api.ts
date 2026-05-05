@@ -14,6 +14,7 @@ type AxiosBaseQueryArgs = {
   method?: AxiosRequestConfig["method"];
   data?: AxiosRequestConfig["data"];
   params?: AxiosRequestConfig["params"];
+  responseType?: AxiosRequestConfig["responseType"];
   successMessage?: string;
   errorMessage?: string;
   silent?: boolean;
@@ -28,7 +29,7 @@ const shouldAttemptReauth = (url: string) => {
 };
 
 const axiosBaseQuery = (): BaseQueryFn<AxiosBaseQueryArgs, unknown, QueryError> =>
-  async ({ url, method = "GET", data, params, successMessage, errorMessage, silent = false }, api) => {
+  async ({ url, method = "GET", data, params, responseType, successMessage, errorMessage, silent = false }, api) => {
     try {
       // Access token from Redux state (authoritative) or localStorage (rehydration)
       let token = (api.getState() as RootState).auth.accessToken;
@@ -40,6 +41,7 @@ const axiosBaseQuery = (): BaseQueryFn<AxiosBaseQueryArgs, unknown, QueryError> 
         method,
         data,
         params,
+        responseType,
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
       const normalizedUrl = url.toLowerCase();

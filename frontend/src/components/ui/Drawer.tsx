@@ -93,13 +93,14 @@ export function Drawer({ open, onClose, title, children, footer }: DrawerProps) 
         aria-hidden="true"
       />
 
-      {/* ── Mobile: bottom sheet ── slides up from bottom */}
+      {/* ── Mobile: bottom sheet ── slides up from bottom, 90 vh */}
       <div
         className={`
           sm:hidden
           absolute bottom-0 left-0 right-0
-          w-full max-w-[100vw] bg-surface rounded-t-2xl shadow-2xl
-          flex flex-col max-h-[90vh] overflow-hidden
+          w-full h-[90vh]
+          bg-surface shadow-2xl flex flex-col overflow-hidden
+          rounded-t-2xl
           ${transition}
           ${visible ? "translate-y-0" : "translate-y-full"}
         `}
