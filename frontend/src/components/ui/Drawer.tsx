@@ -70,7 +70,7 @@ export function Drawer({ open, onClose, title, children, footer }: DrawerProps) 
   );
 
   const body = (
-    <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
+    <div className="flex-1 overflow-y-auto overflow-x-hidden px-5 py-4">{children}</div>
   );
 
   const footerEl = footer ? (
@@ -98,8 +98,8 @@ export function Drawer({ open, onClose, title, children, footer }: DrawerProps) 
         className={`
           sm:hidden
           absolute bottom-0 left-0 right-0
-          w-full bg-surface rounded-t-2xl shadow-2xl
-          flex flex-col max-h-[90vh]
+          w-full max-w-[100vw] bg-surface rounded-t-2xl shadow-2xl
+          flex flex-col max-h-[90vh] overflow-hidden
           ${transition}
           ${visible ? "translate-y-0" : "translate-y-full"}
         `}

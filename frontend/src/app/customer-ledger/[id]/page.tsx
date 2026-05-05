@@ -146,37 +146,30 @@ interface EntryFormProps {
 }
 function EntryForm({ txMode, form, amountErr, partyName, onChange }: Readonly<EntryFormProps>) {
   const isCredit = txMode === "credit";
-  const accentBorder = isCredit ? "border-primary-400 bg-primary-50/30 dark:bg-primary-900/10" : "border-success-500 bg-success-50/30 dark:bg-success-900/10";
-  const rupeeColor = isCredit ? "text-primary-500" : "text-success-600";
   const tagClass = isCredit
     ? "bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-400"
     : "bg-success-100 text-success-700 dark:bg-success-900/40 dark:text-success-400";
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-2">
-        <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${tagClass}`}>
+      <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+        <span className={`px-2.5 py-1 rounded-full text-xs font-bold truncate max-w-full ${tagClass}`}>
           {isCredit ? `You Gave ₹ to ${partyName}` : `Got Back ₹ from ${partyName}`}
         </span>
       </div>
 
-      <div>
-        <div className={`flex items-center gap-2 rounded-2xl border-2 px-4 py-3.5 ${accentBorder}`}>
-          <span className={`text-2xl font-bold ${rupeeColor}`}>₹</span>
-          <input
-            id="tx-amount"
-            type="number"
-            aria-label="Amount"
-            className="flex-1 bg-transparent text-3xl font-bold text-text outline-none placeholder:text-muted/30"
-            placeholder="0"
-            value={form.amount}
-            onChange={(e) => onChange({ amount: e.target.value })}
-            autoFocus
-            min="0"
-            step="1"
-          />
-        </div>
-        {amountErr ? <p className="text-xs text-danger-500 mt-1.5">{amountErr}</p> : null}
-      </div>
+      <Input
+        label="Amount"
+        id="tx-amount"
+        type="number"
+        prefix="₹"
+        placeholder="0"
+        value={form.amount}
+        onChange={(e) => onChange({ amount: e.target.value })}
+        autoFocus
+        min="0"
+        step="1"
+        error={amountErr}
+      />
 
       <Input
         label="Date"

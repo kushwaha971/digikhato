@@ -75,8 +75,9 @@ export function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps) {
           : moduleContext === "notes"
             ? NOTES_MODULE_NAV.filter(canSeeItem)
             : [];
+  // Exclude "All Notes" from the Apps section when already showing the notes module nav
   const visibleAppsTools = [
-    NOTES_MODULE_NAV[0],
+    ...(moduleContext !== "notes" ? [NOTES_MODULE_NAV[0]] : []),
     MODULE_SWITCH_NAV,
   ].filter(canSeeItem);
   const visibleModuleList = MODULE_LIST_NAV.filter(canSeeItem);

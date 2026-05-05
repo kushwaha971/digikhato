@@ -43,7 +43,7 @@ function AppShellInner({ children }: AppShellProps) {
         style={{ ["--desktop-screen-top" as string]: showDesktopHeader ? "4rem" : "0px" }}
       >
         {/* Mobile top bar */}
-        <header className="lg:hidden sticky top-0 z-30 h-16 flex items-center justify-between px-4 border-b border-border bg-surface/90 backdrop-blur-sm">
+        <header className="lg:hidden sticky top-0 z-30 h-16 flex items-center justify-between px-4 border-b border-border bg-surface shadow-sm">
           <BrandLogo size="sm" />
           <div className="flex items-center gap-2">
             {notificationsEnabled && (
@@ -77,7 +77,7 @@ function AppShellInner({ children }: AppShellProps) {
 
         {/* Desktop header */}
         {showDesktopHeader ? (
-          <header className="hidden lg:flex sticky top-0 z-30 h-16 items-center justify-between px-6 border-b border-border bg-surface/80 backdrop-blur-sm">
+          <header className="hidden lg:flex sticky top-0 z-30 h-16 items-center justify-between px-6 border-b border-border bg-surface shadow-sm">
             <div className="w-full max-w-md">
               {showGlobalSearch ? <GlobalSearch /> : null}
             </div>

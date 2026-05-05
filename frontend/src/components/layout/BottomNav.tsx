@@ -157,7 +157,7 @@ function BottomBar({
   path: string;
 }>) {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 lg:hidden border-t border-border bg-surface/95 backdrop-blur-md">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 lg:hidden border-t border-border bg-surface shadow-[0_-1px_4px_rgba(0,0,0,0.06)]">
       <ul className="grid gap-0 h-16" style={{ gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}>
         {tabs.map((tab, idx) => {
           const isActive = path === tab.href || (tab.href !== "/" && path.startsWith(tab.href + "/"));
