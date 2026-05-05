@@ -296,6 +296,17 @@ export default function UdharDetailPage() {
               </a>
             ) : null}
           </div>
+          {/* Delete party — placed here so it's always visible without scrolling */}
+          <button
+            type="button"
+            title="Delete this party"
+            onClick={() => setShowDelete(true)}
+            className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-xl border border-danger-200 dark:border-danger-900 text-danger-400 hover:text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-900/20 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
         </div>
         <div className="border-t border-current border-opacity-10 pt-4 flex items-end justify-between">
           <div>
@@ -360,25 +371,16 @@ export default function UdharDetailPage() {
         </div>
       )}
 
-      <div className="mt-4 pt-5 border-t border-border text-center">
-        <button
-          type="button"
-          onClick={() => setShowDelete(true)}
-          className="text-xs text-muted hover:text-danger-500 transition-colors"
-        >
-          Delete this party
-        </button>
-      </div>
+      {/* Spacer so content isn't hidden under the fixed action bar */}
+      <div className="h-14" />
 
-      <div className="h-20 lg:h-16" />
-
-      {/* ── Action bar: two direct buttons, NOT a full-width split ── */}
-      <div className="fixed bottom-[4.75rem] lg:bottom-0 left-0 right-0 lg:left-[4rem] xl:left-[16rem] z-20 bg-surface/95 backdrop-blur-sm border-t border-border px-4 py-2">
-        <div className="flex gap-2.5 max-w-md mx-auto">
+      {/* ── Action bar ── */}
+      <div className="fixed bottom-[4rem] lg:bottom-0 left-0 right-0 lg:left-[4rem] xl:left-[16rem] z-20 bg-surface border-t border-border px-4 py-2.5">
+        <div className="flex gap-2 max-w-md mx-auto">
           <button
             type="button"
             onClick={() => openTx("credit")}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary-500 hover:bg-primary-600 active:bg-primary-700 text-white font-bold text-sm transition-colors"
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-primary-500 hover:bg-primary-600 active:bg-primary-700 text-white font-semibold text-sm transition-colors"
           >
             <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
@@ -388,7 +390,7 @@ export default function UdharDetailPage() {
           <button
             type="button"
             onClick={() => openTx("payment")}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-success-500 text-success-600 dark:text-success-400 font-bold text-sm hover:bg-success-50 dark:hover:bg-success-900/20 active:bg-success-100 transition-colors"
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border-2 border-success-500 text-success-600 dark:text-success-400 font-semibold text-sm hover:bg-success-50 dark:hover:bg-success-900/20 active:bg-success-100 transition-colors"
           >
             <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19 12H5m7 7l-7-7 7-7" />

@@ -190,7 +190,35 @@ export default function UdharBookPage() {
 
   return (
     <Screen title="Udhar Book">
-      {/* ── Overview panel ── */}
+      {/* ── Search — always at the top ── */}
+      <div className="mb-3 relative">
+        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+        <Input placeholder="Search parties…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+      </div>
+
+      {/* ── Filter chips ── */}
+      {hasParties && (
+        <div className="flex gap-1.5 mb-4 overflow-x-auto pb-0.5">
+          {FILTERS.map((f) => (
+            <button
+              key={f.value}
+              type="button"
+              onClick={() => setFilter(f.value)}
+              className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                filter === f.value
+                  ? "bg-primary-500 border-primary-500 text-white shadow-soft"
+                  : "bg-surface border-border text-muted hover:border-primary-300 hover:text-text"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ── Overview panel — below search/filters ── */}
       {hasParties && (
         <div className="mb-5 app-panel overflow-hidden">
           {/* Net row */}
@@ -219,34 +247,6 @@ export default function UdharBookPage() {
               <p className="text-lg font-bold text-primary-700 dark:text-primary-300">{fmt(stats.owes)}</p>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* ── Search ── */}
-      <div className="mb-3 relative">
-        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-        </svg>
-        <Input placeholder="Search parties…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
-      </div>
-
-      {/* ── Filter chips ── */}
-      {hasParties && (
-        <div className="flex gap-1.5 mb-5 overflow-x-auto pb-0.5">
-          {FILTERS.map((f) => (
-            <button
-              key={f.value}
-              type="button"
-              onClick={() => setFilter(f.value)}
-              className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-                filter === f.value
-                  ? "bg-primary-500 border-primary-500 text-white shadow-soft"
-                  : "bg-surface border-border text-muted hover:border-primary-300 hover:text-text"
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
         </div>
       )}
 

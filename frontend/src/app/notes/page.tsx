@@ -128,14 +128,16 @@ export default function NotesPage() {
       <div className="mb-4">
         <form
           onSubmit={(e) => { e.preventDefault(); setSearch(draftSearch); }}
-          className="flex gap-2"
+          className="flex gap-2 min-w-0"
         >
-          <Input
-            placeholder="Search notes..."
-            value={draftSearch}
-            onChange={(e) => setDraftSearch(e.target.value)}
-          />
-          <Button type="submit" variant="outline" size="sm" fullWidth={false}>
+          <div className="flex-1 min-w-0">
+            <Input
+              placeholder="Search notes..."
+              value={draftSearch}
+              onChange={(e) => setDraftSearch(e.target.value)}
+            />
+          </div>
+          <Button type="submit" variant="outline" size="sm" fullWidth={false} className="flex-shrink-0">
             Search
           </Button>
         </form>

@@ -138,54 +138,6 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Module Cards */}
-      {(isAdmin || isCollector) && (
-        <div className="mb-6">
-          <h2 className="text-sm font-semibold text-text mb-3">Your Modules</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {/* Customer Ledger */}
-            <Link href={ROUTES.app.udhaarbook.root} className="app-panel p-4 card-clickable flex items-start gap-3">
-              <div className="w-10 h-10 rounded-xl bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center flex-shrink-0">
-                <svg className="w-5 h-5 text-primary-600 dark:text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 4h11a3 3 0 013 3v10a3 3 0 01-3 3H6a2 2 0 00-2 2V6a2 2 0 012-2z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 9h8M8 13h5" />
-                </svg>
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-text mb-1">Udhar Book</p>
-                <p className="text-xs text-muted leading-relaxed">Who owes you · Who you owe · All in one place</p>
-              </div>
-            </Link>
-
-            {/* Notes */}
-            <Link href={ROUTES.app.notes.root} className="app-panel p-4 card-clickable flex items-start gap-3">
-              <div className="w-10 h-10 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center flex-shrink-0">
-                <svg className="w-5 h-5 text-neutral-500 dark:text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-text mb-1">Notes</p>
-                <p className="text-xs text-muted leading-relaxed">Write reminders, daily tasks, and work notes.</p>
-              </div>
-            </Link>
-
-            {/* Loan Management */}
-            <Link href={ROUTES.app.loans.dashboard} className="app-panel p-4 card-clickable flex items-start gap-3">
-              <div className="w-10 h-10 rounded-xl bg-success-100 dark:bg-success-900/30 flex items-center justify-center flex-shrink-0">
-                <svg className="w-5 h-5 text-success-600 dark:text-success-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-text mb-1">Loan Management</p>
-                <p className="text-xs text-muted leading-relaxed">Borrowers, EMI, daily collection, and dues — all here.</p>
-              </div>
-            </Link>
-          </div>
-        </div>
-      )}
-
       {/* Upcoming Due Loans */}
       {!summaryLoading && (summary?.upcoming_due_loans?.length ?? 0) > 0 && (
         <div className="mb-6">
