@@ -1,4 +1,5 @@
 from django.db.models import Q
+from django.utils import timezone
 from rest_framework.permissions import BasePermission
 
 from apps.common.constants import JWL_ROLE_PERMISSIONS, ModuleCode
@@ -52,7 +53,11 @@ class HasJewelleryPermission(BasePermission):
             user=user,
             module=ModuleCode.JEWELLERY,
             is_active=True,
-        ).filter(Q(branch_name=branch_name) | Q(branch_name=""))
+        ).filter(
+            Q(branch_name=branch_name) | Q(branch_name="")
+        ).filter(
+            Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
+        )
 
         for role in roles:
             if self.permission_code in JWL_ROLE_PERMISSIONS.get(role.role_code, []):

@@ -6,7 +6,9 @@ historical bills don't change when masters change.
 """
 
 from decimal import ROUND_HALF_UP, Decimal
+import hashlib
 from typing import Any
+from urllib.parse import quote
 
 from django.db import transaction
 from django.utils import timezone
@@ -19,6 +21,7 @@ from apps.jewellery.models.billing import (
 )
 from apps.jewellery.models.inventory import Item
 from apps.jewellery.services.number_series import get_next_number
+from apps.notifications.models import Notification, NotificationType
 
 TWO = Decimal("0.01")
 FOUR = Decimal("0.0001")
@@ -428,11 +431,22 @@ def create_invoice(tenant, branch_name: str, invoice_data: dict, lines_data: lis
         )
 
         for i, cl in enumerate(totals["computed_lines"], start=1):
+            item_id = cl.get("item")
+            line_huid = (cl.get("huid") or "").strip().upper()
+            if item_id:
+                item_huid = (
+                    Item.objects.filter(id=item_id, tenant=tenant, deleted_at__isnull=True)
+                    .values_list("huid", flat=True)
+                    .first()
+                    or ""
+                )
+                line_huid = item_huid.strip().upper()[:6]
             SalesInvoiceLine.objects.create(
                 invoice=invoice,
                 line_no=i,
-                item_id=cl.get("item"),
+                item_id=item_id,
                 description=cl.get("description", ""),
+                huid=line_huid,
                 hsn_code=cl.get("hsn_code", ""),
                 metal_code=cl.get("metal_code", ""),
                 purity_code=cl.get("purity_code", ""),
@@ -492,5 +506,185 @@ def create_invoice(tenant, branch_name: str, invoice_data: dict, lines_data: lis
         invoice.paid_amount = paid
         invoice.balance_amount = balance
         invoice.save(update_fields=["advance_used", "paid_amount", "balance_amount", "updated_at"])
+
+    return invoice
+
+
+def convert_to_invoice(estimate: SalesInvoice, converted_by: Any) -> SalesInvoice:
+    """Clone an ESTIMATE into a new TAX_INVOICE DRAFT with identical lines and totals."""
+    if estimate.invoice_type != "ESTIMATE":
+        raise ValueError("Only estimates can be converted to tax invoices.")
+
+    with transaction.atomic():
+        new_invoice = SalesInvoice.objects.create(
+            tenant=estimate.tenant,
+            branch_name=estimate.branch_name,
+            created_by=converted_by,
+            updated_by=converted_by,
+            customer=estimate.customer,
+            invoice_type="TAX_INVOICE",
+            seller_state_code=estimate.seller_state_code,
+            place_of_supply_state_code=estimate.place_of_supply_state_code,
+            is_inter_state=estimate.is_inter_state,
+            notes=estimate.notes,
+            discount_amount=estimate.discount_amount,
+            gross_amount=estimate.gross_amount,
+            taxable_amount=estimate.taxable_amount,
+            stone_value=estimate.stone_value,
+            cgst=estimate.cgst,
+            sgst=estimate.sgst,
+            igst=estimate.igst,
+            hallmark_gst=estimate.hallmark_gst,
+            round_off=estimate.round_off,
+            total_amount=estimate.total_amount,
+            paid_amount=Decimal("0.00"),
+            advance_used=Decimal("0.00"),
+            balance_amount=estimate.total_amount,
+        )
+
+        for orig_line in estimate.lines.filter(deleted_at__isnull=True).order_by("line_no"):
+            SalesInvoiceLine.objects.create(
+                invoice=new_invoice,
+                line_no=orig_line.line_no,
+                item=orig_line.item,
+                description=orig_line.description,
+                huid=orig_line.huid,
+                hsn_code=orig_line.hsn_code,
+                metal_code=orig_line.metal_code,
+                purity_code=orig_line.purity_code,
+                gross_wt=orig_line.gross_wt,
+                net_wt=orig_line.net_wt,
+                stone_wt=orig_line.stone_wt,
+                rate_per_gram=orig_line.rate_per_gram,
+                metal_value=orig_line.metal_value,
+                making_mode=orig_line.making_mode,
+                making_rate=orig_line.making_rate,
+                making_charge=orig_line.making_charge,
+                wastage_pct=orig_line.wastage_pct,
+                wastage_amount=orig_line.wastage_amount,
+                hallmarking_fee=orig_line.hallmarking_fee,
+                stone_value=orig_line.stone_value,
+                gst_rate_pct=orig_line.gst_rate_pct,
+                line_metal_part=orig_line.line_metal_part,
+                gst_amount=orig_line.gst_amount,
+                hallmark_gst_amount=orig_line.hallmark_gst_amount,
+                discount_allocated=orig_line.discount_allocated,
+                line_subtotal=orig_line.line_subtotal,
+                line_total=orig_line.line_total,
+                created_by=converted_by,
+                updated_by=converted_by,
+            )
+
+    return new_invoice
+
+
+def _sanitize_phone(value: str) -> str:
+    return "".join(ch for ch in str(value or "") if ch.isdigit())
+
+
+def build_invoice_share_payload(invoice: SalesInvoice, channel: str, to: str) -> dict[str, str]:
+    if invoice.status != "ISSUED":
+        raise ValueError("Only issued invoices can be shared.")
+
+    channel = str(channel or "").upper().strip()
+    recipient = str(to or "").strip()
+    if channel not in {"WA", "SMS", "EMAIL"}:
+        raise ValueError("Invalid channel. Use WA, SMS, or EMAIL.")
+    if not recipient:
+        raise ValueError("Recipient is required.")
+
+    doc_label = "Credit Note" if invoice.invoice_type == "CREDIT_NOTE" else "Invoice"
+    message = (
+        f"{doc_label} {invoice.voucher_no or invoice.id} for "
+        f"Rs {invoice.total_amount} is ready. "
+        f"Download PDF: /api/jwl/v1/sales/invoices/{invoice.id}/pdf/"
+    )
+
+    if channel == "WA":
+        phone = _sanitize_phone(recipient)
+        if len(phone) < 10:
+            raise ValueError("Invalid WhatsApp number.")
+        share_url = f"https://wa.me/{phone}?text={quote(message)}"
+    elif channel == "SMS":
+        phone = _sanitize_phone(recipient)
+        if len(phone) < 10:
+            raise ValueError("Invalid mobile number for SMS.")
+        share_url = f"sms:{phone}?body={quote(message)}"
+    else:
+        share_url = f"mailto:{recipient}?subject={quote(doc_label)}&body={quote(message)}"
+
+    return {
+        "channel": channel,
+        "to": recipient,
+        "message": message,
+        "share_url": share_url,
+    }
+
+
+def send_invoice(invoice: SalesInvoice, channel: str, to: str, sent_by: Any) -> dict[str, str]:
+    payload = build_invoice_share_payload(invoice, channel=channel, to=to)
+    Notification.objects.create(
+        user=sent_by,
+        role=sent_by.role,
+        type=NotificationType.SYSTEM_ACTIVITY,
+        message=(
+            f"Shared {invoice.get_invoice_type_display()} {invoice.voucher_no or invoice.id} "
+            f"via {payload['channel']} to {payload['to']}."
+        ),
+        redirect_target=f"/jewellery/billing/{invoice.id}",
+        is_read=False,
+        is_active=True,
+    )
+    payload["status"] = "ready"
+    return payload
+
+
+def generate_e_invoice(invoice: SalesInvoice, generated_by: Any) -> SalesInvoice:
+    if invoice.status != "ISSUED":
+        raise ValueError("Only issued invoices can generate e-invoice.")
+    if invoice.invoice_type != "TAX_INVOICE":
+        raise ValueError("E-invoice is currently supported only for tax invoices.")
+
+    if invoice.e_invoice_irn:
+        return invoice
+
+    seed = "|".join(
+        [
+            str(invoice.tenant_id),
+            str(invoice.id),
+            invoice.voucher_no or "",
+            str(invoice.voucher_date or ""),
+            str(invoice.total_amount),
+        ]
+    )
+    irn = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:32].upper()
+    qr_payload = (
+        f"IRN:{irn}|INV:{invoice.voucher_no or invoice.id}|DATE:{invoice.voucher_date or ''}|"
+        f"AMT:{invoice.total_amount}|GSTIN:{invoice.customer.gstin if invoice.customer else ''}"
+    )
+
+    with transaction.atomic():
+        invoice.e_invoice_irn = irn
+        invoice.e_invoice_qr = qr_payload
+        invoice.e_invoice_is_simulated = True
+        invoice.updated_by = generated_by
+        invoice.save(
+            update_fields=[
+                "e_invoice_irn",
+                "e_invoice_qr",
+                "e_invoice_is_simulated",
+                "updated_by",
+                "updated_at",
+            ]
+        )
+        Notification.objects.create(
+            user=generated_by,
+            role=generated_by.role,
+            type=NotificationType.SYSTEM_ACTIVITY,
+            message=f"E-invoice IRN generated for {invoice.voucher_no or invoice.id}.",
+            redirect_target=f"/jewellery/billing/{invoice.id}",
+            is_read=False,
+            is_active=True,
+        )
 
     return invoice

@@ -21,6 +21,7 @@ export interface JwlItem {
   sku: string;
   barcode: string;
   huid: string;
+  hallmark_status: "NOT_HALLMARKED" | "HALLMARKED" | "HUID_ASSIGNED";
   design: string;
   design_name: string;
   category_name: string;
@@ -30,6 +31,8 @@ export interface JwlItem {
   purity_code: string;
   gross_wt: string;
   net_wt: string;
+  stone_wt: string;
+  charge_wt: string;
   status: "IN_STOCK" | "SOLD" | "ISSUED" | "TRANSIT" | "WRITTEN_OFF";
   location_bin: string;
   branch_name: string;
@@ -70,9 +73,13 @@ export interface JwlItemListParams {
   branch?: string;
   status?: string;
   purity?: string;
+  metal_code?: string;
+  hallmark_status?: string;
   design?: string;
+  design_name?: string;
   search?: string;
   page?: number;
+  page_size?: number;
 }
 
 export interface PaginatedResponse<T> {
@@ -150,6 +157,13 @@ export interface JwlTransferLine {
   weight: string;
 }
 
+export interface JwlTransferCreateParams {
+  from_branch?: string;
+  to_branch: string;
+  notes?: string;
+  lines: Array<{ item: string; qty: number; weight?: string }>;
+}
+
 // ─── Billing ──────────────────────────────────────────────────────────────────
 
 export interface JwlCustomer {
@@ -179,6 +193,7 @@ export interface JwlInvoiceLine {
   line_no: number;
   item: string | null;
   description: string;
+  huid: string;
   hsn_code: string;
   metal_code: string;
   purity_code: string;
@@ -230,6 +245,7 @@ export interface JwlInvoice {
   status: InvoiceStatus;
   customer: string | null;
   customer_name: string;
+  customer_gstin: string;
   reference_invoice: string | null;
   reference_invoice_no: string;
   place_of_supply_state_code: string;
@@ -248,6 +264,9 @@ export interface JwlInvoice {
   advance_used: string;
   paid_amount: string;
   balance_amount: string;
+  e_invoice_irn: string;
+  e_invoice_qr: string;
+  e_invoice_is_simulated: boolean;
   notes: string;
   issued_at: string | null;
   cancelled_at: string | null;
@@ -260,9 +279,18 @@ export interface JwlInvoice {
   old_gold_purchases: JwlOldGoldPurchase[];
 }
 
+export interface JwlInvoiceSharePayload {
+  status: "ready";
+  channel: "WA" | "SMS" | "EMAIL";
+  to: string;
+  message: string;
+  share_url: string;
+}
+
 export interface JwlInvoiceLineInput {
   item?: string;
   description?: string;
+  huid?: string;
   hsn_code?: string;
   metal_code?: string;
   purity_code?: string;
@@ -319,7 +347,70 @@ export interface JwlInvoiceListParams {
   search?: string;
   from?: string;
   to?: string;
+  ordering?: "-voucher_date" | "voucher_date" | "-created_at" | "created_at";
   page?: number;
+}
+
+// ─── Master Data ──────────────────────────────────────────────────────────────
+
+export interface JwlMetal {
+  id: string;
+  code: string;
+  name: string;
+  default_unit: string;
+}
+
+export interface JwlPurity {
+  id: string;
+  metal: string;
+  metal_code: string;
+  code: string;
+  pct: string;
+}
+
+export interface JwlCategoryNode {
+  id: string;
+  parent: string | null;
+  name: string;
+  hsn_code: string;
+  default_making_charge_formula: string;
+  default_wastage_pct: string;
+  children: JwlCategoryNode[];
+}
+
+export interface JwlDesign {
+  id: string;
+  category: string | null;
+  code: string;
+  name: string;
+  image_urls: string[];
+  default_weight: string;
+  default_stones: string;
+  default_labour: string;
+  bom: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JwlTaxSlab {
+  id: string;
+  name: string;
+  rate_pct: string;
+  applies_to: string;
+  effective_from: string;
+  effective_to: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JwlNumberSeries {
+  id: string;
+  voucher_type: string;
+  prefix: string;
+  next_number: number;
+  padding: number;
+  created_at: string;
+  updated_at: string;
 }
 
 // ─── Rates ────────────────────────────────────────────────────────────────────
@@ -358,6 +449,209 @@ export interface JwlRateHistoryParams {
   purity?: string;
   from?: string;
   to?: string;
+}
+
+// ─── Admin Controls ───────────────────────────────────────────────────────────
+
+export interface JwlAdminFlags {
+  [key: string]: boolean;
+}
+
+export interface JwlTrashItem {
+  entity: string;
+  id: string;
+  label: string;
+  deleted_at: string;
+}
+
+export interface JwlLockPeriodParams {
+  entity: "global" | "branch";
+  branch_name?: string;
+  lock_period_end: string;
+}
+
+// ─── Karigar & Orders ─────────────────────────────────────────────────────────
+
+export interface JwlKarigar {
+  id: string;
+  code: string;
+  name: string;
+  mobile: string;
+  kyc_pan: string;
+  kyc_aadhaar_masked?: string;
+  default_labour_rate: string | null;
+  default_wastage_pct: string;
+  specialization: string;
+  is_active: boolean;
+  branch_name?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface JwlOutstandingParty {
+  id: string;
+  customer_id: string;
+  customer_name: string;
+  mobile: string;
+  amount_balance: string;
+  metal_balance_grams: string;
+  last_txn_date: string | null;
+  overdue_90_plus: boolean;
+  age_days: number;
+  ageing_bucket: "0_30" | "31_60" | "61_90" | "90_plus";
+}
+
+export interface JwlOutstandingMovement {
+  id: string;
+  balance: string;
+  movement_type: string;
+  amount_delta: string;
+  metal_delta_grams: string;
+  reference_type: string;
+  reference_id: string;
+  notes: string;
+  txn_date: string;
+  created_at: string;
+}
+
+export interface JwlOutstandingDetail {
+  id: string;
+  customer: string;
+  customer_name: string;
+  customer_mobile: string;
+  amount_balance: string;
+  metal_balance_grams: string;
+  last_txn_date: string | null;
+  movements: JwlOutstandingMovement[];
+}
+
+export interface JwlPuritySummaryRow {
+  metal_code: string;
+  purity_code: string;
+  item_count: number;
+  gross_wt_total: string;
+  net_wt_total: string;
+  charge_wt_total: string;
+}
+
+export type OrderStatus =
+  | "BOOKED" | "METAL_ISSUED" | "WIP" | "KARIGAR_RECEIVED"
+  | "QC" | "HALLMARKED" | "READY" | "DELIVERED" | "CLOSED" | "CANCELLED";
+
+export interface JwlCustomerOrder {
+  id: string;
+  order_no: string;
+  order_date: string;
+  customer: string;
+  customer_name: string;
+  design: string | null;
+  expected_delivery: string | null;
+  advance_amount: string;
+  status: OrderStatus;
+  notes: string;
+  created_at: string;
+}
+
+export interface JwlKarigarIssue {
+  id: string;
+  voucher_no: string;
+  date: string;
+  karigar: string;
+  karigar_name: string;
+  order: string | null;
+  metal: string;
+  gross_wt_issued: string;
+  tunch_pct: string;
+  pure_gold_wt_issued: string;
+  notes: string;
+  created_at: string;
+}
+
+export interface JwlKarigarReceipt {
+  id: string;
+  voucher_no: string;
+  date: string;
+  karigar: string;
+  karigar_name: string;
+  issue: string;
+  gross_wt_received: string;
+  net_wt: string;
+  stone_wt: string;
+  final_purity_pct: string;
+  pure_gold_wt_received: string;
+  wastage_actual_pct: string;
+  labour_amount: string;
+  pure_diff: string;
+  status: string;
+  created_at: string;
+}
+
+// ─── Gold Pledge Loans ────────────────────────────────────────────────────────
+
+export interface JwlLoanScheme {
+  id: string;
+  name: string;
+  ltv_pct: string;
+  interest_method: "SIMPLE" | "COMPOUND" | "FLAT" | "DAILY";
+  interest_rate_pct: string;
+  min_tenure: number;
+  max_tenure: number;
+  late_fee_pct: string;
+  is_active: boolean;
+}
+
+export interface JwlPledgeItem {
+  id: number;
+  line_no: number;
+  description: string;
+  metal: string;
+  purity: string;
+  gross_wt: string;
+  net_wt: string;
+  stone_wt: string;
+  valuation_rate: string;
+  valuation_amount: string;
+  is_released: boolean;
+}
+
+export interface JwlPledgeLoan {
+  id: string;
+  loan_no: string;
+  loan_date: string;
+  customer: string;
+  customer_name: string;
+  scheme: string;
+  scheme_name: string;
+  principal: string;
+  interest_rate_pct: string;
+  interest_method: string;
+  tenure_months: number;
+  ltv_pct: string;
+  status: "ACTIVE" | "RENEWED" | "CLOSED" | "AUCTIONED" | "LOSS";
+  maturity_date: string | null;
+  pledge_items: JwlPledgeItem[];
+  created_at: string;
+}
+
+export interface JwlLoanRepayment {
+  id: string;
+  loan: string;
+  date: string;
+  principal_paid: string;
+  interest_paid: string;
+  mode: string;
+  reference: string;
+  items_released: string[];
+  balance_after: string;
+  created_at: string;
+}
+
+export interface JwlInterestPreview {
+  interest: string;
+  total_due: string;
+  method: string;
+  days?: number;
+  months?: number;
 }
 
 // ─── RTK Slice ────────────────────────────────────────────────────────────────
@@ -420,7 +714,7 @@ export const jewelleryApi = api.injectEndpoints({
       query: (params) => ({ url: "jwl/v1/transfers/", params }),
       providesTags: ["Jewellery"],
     }),
-    createTransfer: builder.mutation<JwlTransfer, Partial<JwlTransfer>>({
+    createTransfer: builder.mutation<JwlTransfer, JwlTransferCreateParams>({
       query: (data) => ({ url: "jwl/v1/transfers/", method: "POST", data }),
       invalidatesTags: ["Jewellery"],
     }),
@@ -482,6 +776,98 @@ export const jewelleryApi = api.injectEndpoints({
     calculateInvoice: builder.mutation<JwlCalculateResult, Omit<JwlCreateInvoiceParams, "customer" | "old_gold" | "payments">>({
       query: (data) => ({ url: "jwl/v1/sales/calculate/", method: "POST", data, silent: true }),
     }),
+    sendInvoice: builder.mutation<JwlInvoiceSharePayload, { id: string; channel: "WA" | "SMS" | "EMAIL"; to: string }>({
+      query: ({ id, channel, to }) => ({
+        url: `jwl/v1/sales/invoices/${id}/send/`,
+        method: "POST",
+        data: { channel, to },
+      }),
+    }),
+    generateEInvoice: builder.mutation<JwlInvoice, string>({
+      query: (id) => ({ url: `jwl/v1/sales/invoices/${id}/e-invoice/`, method: "POST" }),
+      invalidatesTags: ["Jewellery"],
+    }),
+
+    convertToInvoice: builder.mutation<JwlInvoice, string>({
+      query: (id) => ({ url: `jwl/v1/sales/invoices/${id}/convert-to-invoice/`, method: "POST" }),
+      invalidatesTags: ["Jewellery"],
+    }),
+
+    // Master — Metals
+    listMetals: builder.query<JwlMetal[], void>({
+      query: () => ({ url: "jwl/v1/metals/" }),
+      providesTags: ["Jewellery"],
+    }),
+
+    // Master — Purities
+    listPurities: builder.query<JwlPurity[], { metal?: string }>({
+      query: (params) => ({ url: "jwl/v1/purities/", params }),
+      providesTags: ["Jewellery"],
+    }),
+
+    // Master — Categories (tree)
+    listCategories: builder.query<JwlCategoryNode[], void>({
+      query: () => ({ url: "jwl/v1/categories/" }),
+      providesTags: ["Jewellery"],
+    }),
+    createCategory: builder.mutation<JwlCategoryNode, Partial<JwlCategoryNode>>({
+      query: (data) => ({ url: "jwl/v1/categories/", method: "POST", data }),
+      invalidatesTags: ["Jewellery"],
+    }),
+    updateCategory: builder.mutation<JwlCategoryNode, { id: string } & Partial<JwlCategoryNode>>({
+      query: ({ id, ...data }) => ({ url: `jwl/v1/categories/${id}/`, method: "PATCH", data }),
+      invalidatesTags: ["Jewellery"],
+    }),
+    deleteCategory: builder.mutation<void, string>({
+      query: (id) => ({ url: `jwl/v1/categories/${id}/`, method: "DELETE" }),
+      invalidatesTags: ["Jewellery"],
+    }),
+
+    // Master — Designs
+    listDesigns: builder.query<PaginatedResponse<JwlDesign>, { category?: string; search?: string; page?: number }>({
+      query: (params) => ({ url: "jwl/v1/designs/", params }),
+      providesTags: ["Jewellery"],
+    }),
+    getDesign: builder.query<JwlDesign, string>({
+      query: (id) => ({ url: `jwl/v1/designs/${id}/` }),
+      providesTags: ["Jewellery"],
+    }),
+    createDesign: builder.mutation<JwlDesign, Partial<JwlDesign>>({
+      query: (data) => ({ url: "jwl/v1/designs/", method: "POST", data }),
+      invalidatesTags: ["Jewellery"],
+    }),
+    updateDesign: builder.mutation<JwlDesign, { id: string } & Partial<JwlDesign>>({
+      query: ({ id, ...data }) => ({ url: `jwl/v1/designs/${id}/`, method: "PATCH", data }),
+      invalidatesTags: ["Jewellery"],
+    }),
+    deleteDesign: builder.mutation<void, string>({
+      query: (id) => ({ url: `jwl/v1/designs/${id}/`, method: "DELETE" }),
+      invalidatesTags: ["Jewellery"],
+    }),
+
+    // Master — Tax Slabs
+    listTaxSlabs: builder.query<PaginatedResponse<JwlTaxSlab>, void>({
+      query: () => ({ url: "jwl/v1/tax-slabs/" }),
+      providesTags: ["Jewellery"],
+    }),
+    createTaxSlab: builder.mutation<JwlTaxSlab, Partial<JwlTaxSlab>>({
+      query: (data) => ({ url: "jwl/v1/tax-slabs/", method: "POST", data }),
+      invalidatesTags: ["Jewellery"],
+    }),
+    updateTaxSlab: builder.mutation<JwlTaxSlab, { id: string } & Partial<JwlTaxSlab>>({
+      query: ({ id, ...data }) => ({ url: `jwl/v1/tax-slabs/${id}/`, method: "PATCH", data }),
+      invalidatesTags: ["Jewellery"],
+    }),
+
+    // Master — Number Series
+    listNumberSeries: builder.query<PaginatedResponse<JwlNumberSeries>, void>({
+      query: () => ({ url: "jwl/v1/number-series/" }),
+      providesTags: ["Jewellery"],
+    }),
+    updateNumberSeries: builder.mutation<JwlNumberSeries, { id: string } & Partial<JwlNumberSeries>>({
+      query: ({ id, ...data }) => ({ url: `jwl/v1/number-series/${id}/`, method: "PATCH", data }),
+      invalidatesTags: ["Jewellery"],
+    }),
 
     // Rates
     getLiveRates: builder.query<JwlLiveRate[], void>({
@@ -494,6 +880,149 @@ export const jewelleryApi = api.injectEndpoints({
     }),
     overrideRate: builder.mutation<unknown, JwlRateOverrideParams>({
       query: (data) => ({ url: "jwl/v1/rates/override/", method: "POST", data }),
+      invalidatesTags: ["Jewellery"],
+    }),
+
+    // Admin Controls
+    getAdminFeatureFlags: builder.query<JwlAdminFlags, void>({
+      query: () => ({ url: "jwl/v1/admin/feature-flags/" }),
+      providesTags: ["Jewellery"],
+    }),
+    updateAdminFeatureFlags: builder.mutation<JwlAdminFlags, JwlAdminFlags>({
+      query: (data) => ({ url: "jwl/v1/admin/feature-flags/", method: "PATCH", data }),
+      invalidatesTags: ["Jewellery"],
+    }),
+    listAdminTrash: builder.query<JwlTrashItem[], void>({
+      query: () => ({ url: "jwl/v1/admin/trash/" }),
+      providesTags: ["Jewellery"],
+    }),
+    restoreFromTrash: builder.mutation<{ restored: boolean }, { entity: string; id: string }>({
+      query: ({ entity, id }) => ({
+        url: `jwl/v1/admin/trash/${entity}/${id}/restore/`,
+        method: "POST",
+      }),
+      invalidatesTags: ["Jewellery"],
+    }),
+    setLockPeriod: builder.mutation<{ lock_period_end: string }, JwlLockPeriodParams>({
+      query: (data) => ({ url: "jwl/v1/admin/lock-period/", method: "POST", data }),
+      invalidatesTags: ["Jewellery"],
+    }),
+
+    // Karigar
+    listKarigars: builder.query<PaginatedResponse<JwlKarigar>, { search?: string; active_only?: boolean }>({
+      query: (params) => ({ url: "jwl/v1/karigar/", params }),
+      providesTags: ["Jewellery"],
+    }),
+    getKarigar: builder.query<JwlKarigar, string>({
+      query: (id) => ({ url: `jwl/v1/karigar/${id}/` }),
+      providesTags: ["Jewellery"],
+    }),
+    createKarigar: builder.mutation<JwlKarigar, Partial<JwlKarigar>>({
+      query: (data) => ({ url: "jwl/v1/karigar/", method: "POST", data }),
+      invalidatesTags: ["Jewellery"],
+    }),
+    updateKarigar: builder.mutation<JwlKarigar, { id: string } & Partial<JwlKarigar>>({
+      query: ({ id, ...data }) => ({ url: `jwl/v1/karigar/${id}/`, method: "PATCH", data }),
+      invalidatesTags: ["Jewellery"],
+    }),
+    listOrders: builder.query<PaginatedResponse<JwlCustomerOrder>, { status?: string; customer?: string }>({
+      query: (params) => ({ url: "jwl/v1/orders/", params }),
+      providesTags: ["Jewellery"],
+    }),
+    createOrder: builder.mutation<JwlCustomerOrder, Partial<JwlCustomerOrder>>({
+      query: (data) => ({ url: "jwl/v1/orders/", method: "POST", data }),
+      invalidatesTags: ["Jewellery"],
+    }),
+    advanceOrderStatus: builder.mutation<JwlCustomerOrder, { id: string; status: OrderStatus }>({
+      query: ({ id, status }) => ({ url: `jwl/v1/orders/${id}/advance/`, method: "POST", data: { status } }),
+      invalidatesTags: ["Jewellery"],
+    }),
+    listKarigarIssues: builder.query<PaginatedResponse<JwlKarigarIssue>, { karigar?: string; order?: string }>({
+      query: (params) => ({ url: "jwl/v1/karigar-issues/", params }),
+      providesTags: ["Jewellery"],
+    }),
+    createKarigarIssue: builder.mutation<JwlKarigarIssue, Record<string, unknown>>({
+      query: (data) => ({ url: "jwl/v1/karigar-issues/", method: "POST", data }),
+      invalidatesTags: ["Jewellery"],
+    }),
+    listKarigarReceipts: builder.query<PaginatedResponse<JwlKarigarReceipt>, { karigar?: string; issue?: string }>({
+      query: (params) => ({ url: "jwl/v1/karigar-receipts/", params }),
+      providesTags: ["Jewellery"],
+    }),
+    createKarigarReceipt: builder.mutation<JwlKarigarReceipt, Record<string, unknown>>({
+      query: (data) => ({ url: "jwl/v1/karigar-receipts/", method: "POST", data }),
+      invalidatesTags: ["Jewellery"],
+    }),
+
+    // Outstanding
+    listOutstanding: builder.query<
+      JwlOutstandingParty[],
+      { ageing?: "30" | "60" | "90" | "90+"; customer?: string; branch_name?: string; include_zero?: boolean }
+    >({
+      query: (params) => ({ url: "jwl/v1/outstanding/", params }),
+      providesTags: ["Jewellery"],
+    }),
+    getOutstandingParty: builder.query<JwlOutstandingDetail, string>({
+      query: (id) => ({ url: `jwl/v1/outstanding/${id}/` }),
+      providesTags: ["Jewellery"],
+    }),
+    postOutstandingAdjustment: builder.mutation<
+      {
+        movement_id: string;
+        movement_type: string;
+        amount_delta: string;
+        metal_delta_grams: string;
+        amount_balance: string;
+        metal_balance_grams: string;
+        last_txn_date: string | null;
+      },
+      {
+        id: string;
+        movement_type?: "MANUAL_ADJUSTMENT";
+        amount_delta: string;
+        metal_delta_grams: string;
+        reference_type?: string;
+        reference_id?: string;
+        notes: string;
+        txn_date?: string;
+      }
+    >({
+      query: ({ id, ...data }) => ({ url: `jwl/v1/outstanding/${id}/adjust/`, method: "POST", data }),
+      invalidatesTags: ["Jewellery"],
+    }),
+
+    // Inventory purity summary
+    listItemPuritySummary: builder.query<JwlPuritySummaryRow[], { metal_code?: string }>({
+      query: (params) => ({ url: "jwl/v1/items/purity-summary/", params }),
+      providesTags: ["Jewellery"],
+    }),
+
+    // Gold Pledge Loans
+    listLoanSchemes: builder.query<PaginatedResponse<JwlLoanScheme>, void>({
+      query: () => ({ url: "jwl/v1/loan-schemes/" }),
+      providesTags: ["Jewellery"],
+    }),
+    createLoanScheme: builder.mutation<JwlLoanScheme, Partial<JwlLoanScheme>>({
+      query: (data) => ({ url: "jwl/v1/loan-schemes/", method: "POST", data }),
+      invalidatesTags: ["Jewellery"],
+    }),
+    listPledgeLoans: builder.query<PaginatedResponse<JwlPledgeLoan>, { status?: string; customer?: string }>({
+      query: (params) => ({ url: "jwl/v1/pledge-loans/", params }),
+      providesTags: ["Jewellery"],
+    }),
+    getPledgeLoan: builder.query<JwlPledgeLoan, string>({
+      query: (id) => ({ url: `jwl/v1/pledge-loans/${id}/` }),
+      providesTags: ["Jewellery"],
+    }),
+    createPledgeLoan: builder.mutation<JwlPledgeLoan, Record<string, unknown>>({
+      query: (data) => ({ url: "jwl/v1/pledge-loans/", method: "POST", data }),
+      invalidatesTags: ["Jewellery"],
+    }),
+    getPledgeLoanInterest: builder.query<JwlInterestPreview, { id: string; days?: number }>({
+      query: ({ id, days }) => ({ url: `jwl/v1/pledge-loans/${id}/interest/`, params: { days } }),
+    }),
+    repayPledgeLoan: builder.mutation<JwlLoanRepayment, { id: string } & Record<string, unknown>>({
+      query: ({ id, ...data }) => ({ url: `jwl/v1/pledge-loans/${id}/repay/`, method: "POST", data }),
       invalidatesTags: ["Jewellery"],
     }),
   }),
@@ -532,4 +1061,50 @@ export const {
   useGetInvoicePdfQuery,
   useLazyGetInvoicePdfQuery,
   useCalculateInvoiceMutation,
+  useSendInvoiceMutation,
+  useGenerateEInvoiceMutation,
+  useConvertToInvoiceMutation,
+  useListMetalsQuery,
+  useListPuritiesQuery,
+  useListCategoriesQuery,
+  useCreateCategoryMutation,
+  useUpdateCategoryMutation,
+  useDeleteCategoryMutation,
+  useListDesignsQuery,
+  useGetDesignQuery,
+  useCreateDesignMutation,
+  useUpdateDesignMutation,
+  useDeleteDesignMutation,
+  useListTaxSlabsQuery,
+  useCreateTaxSlabMutation,
+  useUpdateTaxSlabMutation,
+  useListNumberSeriesQuery,
+  useUpdateNumberSeriesMutation,
+  useGetAdminFeatureFlagsQuery,
+  useUpdateAdminFeatureFlagsMutation,
+  useListAdminTrashQuery,
+  useRestoreFromTrashMutation,
+  useSetLockPeriodMutation,
+  useListKarigarsQuery,
+  useGetKarigarQuery,
+  useCreateKarigarMutation,
+  useUpdateKarigarMutation,
+  useListOrdersQuery,
+  useCreateOrderMutation,
+  useAdvanceOrderStatusMutation,
+  useListKarigarIssuesQuery,
+  useCreateKarigarIssueMutation,
+  useListKarigarReceiptsQuery,
+  useCreateKarigarReceiptMutation,
+  useListOutstandingQuery,
+  useGetOutstandingPartyQuery,
+  usePostOutstandingAdjustmentMutation,
+  useListItemPuritySummaryQuery,
+  useListLoanSchemesQuery,
+  useCreateLoanSchemeMutation,
+  useListPledgeLoansQuery,
+  useGetPledgeLoanQuery,
+  useCreatePledgeLoanMutation,
+  useGetPledgeLoanInterestQuery,
+  useRepayPledgeLoanMutation,
 } = jewelleryApi;

@@ -1,11 +1,12 @@
 "use client";
 
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { InvoiceLineRow, type InvoiceLineDraft } from "@/components/jewellery/billing/InvoiceLineRow";
 import { PaymentSplitTable, type InvoicePaymentDraft } from "@/components/jewellery/billing/PaymentSplitTable";
 import { GstBreakdown } from "@/components/jewellery/billing/GstBreakdown";
+import { CustomerSearchSelect } from "@/components/jewellery/shared/CustomerSearchSelect";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -16,14 +17,21 @@ import {
   useGetLiveRatesQuery,
   useIssueInvoiceMutation,
   useLazyScanItemQuery,
-  useListCustomersQuery,
-  useListItemsQuery,
+  useListInvoicesQuery,
   type InvoiceType,
   type JwlCreateInvoiceParams,
   type JwlInvoice,
   type JwlItem,
 } from "@/store/jewellery-api";
+import { useDebounce } from "@/hooks/useDebounce";
 import { calcOldGoldDeduction, formatINRCurrency } from "@/utils/jewellery/formulas";
+import {
+  INDIAN_STATE_CODES,
+  INVOICE_TYPE_FORM_OPTIONS,
+} from "@/constants/jewellery";
+
+import { IconButton } from "@/components/ui/IconButton";
+import { PlusIcon, TrashIcon } from "@/components/ui/icons";
 
 interface OldGoldDraft {
   metal_code: string;
@@ -47,6 +55,7 @@ const DEFAULT_STATE_CODE = "27";
 function createEmptyLine(defaultRate = "0"): InvoiceLineDraft {
   return {
     item: "",
+    huid: "",
     description: "",
     hsn_code: "7113",
     metal_code: "GOLD",
@@ -90,7 +99,7 @@ function isOldGoldComplete(row: OldGoldDraft) {
   return Number(row.gross_wt) > 0 && Number(row.tested_purity) > 0 && Number(row.buy_rate_per_gram) > 0;
 }
 
-function SectionCard({
+const SectionCard = memo(function SectionCard({
   title,
   open,
   onToggle,
@@ -133,7 +142,7 @@ function SectionCard({
       {open ? <div className="p-4">{children}</div> : null}
     </section>
   );
-}
+});
 
 export function InvoiceFormContent({
   initialInvoiceType = "TAX_INVOICE",
@@ -153,7 +162,10 @@ export function InvoiceFormContent({
 
   const [invoiceType, setInvoiceType] = useState<InvoiceType>(initialInvoiceType);
   const [referenceInvoiceId, setReferenceInvoiceId] = useState(initialReferenceInvoiceId);
-  const [customerSearch, setCustomerSearch] = useState("");
+  const [referenceInvoiceNo, setReferenceInvoiceNo] = useState("");
+  const [refSearch, setRefSearch] = useState("");
+  const [refDropdownOpen, setRefDropdownOpen] = useState(false);
+  const debouncedRefSearch = useDebounce(refSearch, 300);
   const [customerId, setCustomerId] = useState(initialCustomerId);
   const [sellerStateCode, setSellerStateCode] = useState(DEFAULT_STATE_CODE);
   const [placeStateCode, setPlaceStateCode] = useState(DEFAULT_STATE_CODE);
@@ -180,10 +192,10 @@ export function InvoiceFormContent({
   const [issueInvoice, issueState] = useIssueInvoiceMutation();
   const [scanItem, scanState] = useLazyScanItemQuery();
 
-  const { data: customerList } = useListCustomersQuery({ search: customerSearch || undefined });
-  const { data: inventoryList } = useListItemsQuery({ page: 1, status: "IN_STOCK" });
-
-  const inventoryItems: JwlItem[] = inventoryList?.results ?? [];
+  const { data: refInvoiceResults } = useListInvoicesQuery(
+    { page: 1, search: debouncedRefSearch.trim() || undefined, status: "ISSUED" },
+    { skip: invoiceType !== "CREDIT_NOTE" || debouncedRefSearch.trim().length < 1 },
+  );
 
   useEffect(() => {
     setInvoiceType(initialInvoiceType);
@@ -221,6 +233,7 @@ export function InvoiceFormContent({
         lines: lines.map((line) => ({
           item: line.item || undefined,
           description: line.description,
+          huid: line.huid,
           hsn_code: line.hsn_code,
           metal_code: line.metal_code,
           purity_code: line.purity_code,
@@ -247,28 +260,44 @@ export function InvoiceFormContent({
     return () => window.clearTimeout(timer);
   }, [lines, discountAmount, sellerStateCode, placeStateCode, calculateInvoice]);
 
-  const handleLinePatch = (index: number, patch: Partial<InvoiceLineDraft>) => {
+  const handleLinePatch = useCallback((index: number, patch: Partial<InvoiceLineDraft>) => {
     setLines((prev) => {
       const next = [...prev];
-      const merged = { ...next[index], ...patch };
-
-      if (patch.item) {
-        const picked = inventoryItems.find((item) => item.id === patch.item);
-        if (picked) {
-          merged.description = merged.description || picked.design_name || picked.sku;
-          merged.metal_code = picked.metal_code || merged.metal_code;
-          merged.purity_code = picked.purity_code || merged.purity_code;
-          merged.gross_wt = picked.gross_wt || merged.gross_wt;
-          merged.net_wt = picked.net_wt || merged.net_wt;
-        }
-      }
-
-      next[index] = merged;
+      next[index] = { ...next[index], ...patch };
       return next;
     });
-  };
+  }, []);
 
-  const handleScan = async () => {
+  const handleItemSelect = useCallback((index: number, itemId: string, item?: JwlItem) => {
+    setLines((prev) => {
+      const next = [...prev];
+      if (!item) {
+        // Cleared — reset item field only, leave other fields as-is
+        next[index] = { ...next[index], item: "", huid: "" };
+        return next;
+      }
+      // Auto-fill rate from live rates for this item's metal/purity
+      const matchedRate = rateRows?.find(
+        (r) => r.metal === item.metal_code && r.purity === item.purity_code,
+      )?.sell_rate ?? next[index].rate_per_gram;
+
+      next[index] = {
+        ...next[index],
+        item: itemId,
+        huid: item.huid ?? "",
+        description: next[index].description || `${item.design_name || item.sku} ${item.purity_code}`.trim(),
+        metal_code: item.metal_code || next[index].metal_code,
+        purity_code: item.purity_code || next[index].purity_code,
+        gross_wt: item.gross_wt || next[index].gross_wt,
+        net_wt: item.net_wt || next[index].net_wt,
+        stone_wt: item.stone_wt || next[index].stone_wt,
+        rate_per_gram: matchedRate,
+      };
+      return next;
+    });
+  }, [rateRows]);
+
+  const handleScan = useCallback(async () => {
     if (!scanCode.trim()) return;
     setScanError(null);
     try {
@@ -282,6 +311,7 @@ export function InvoiceFormContent({
         next[0] = {
           ...first,
           item: item.id,
+          huid: item.huid || "",
           description: first.description || item.design_name || item.sku,
           metal_code: item.metal_code,
           purity_code: item.purity_code,
@@ -296,9 +326,9 @@ export function InvoiceFormContent({
     } catch {
       setScanError("Item not found for this code.");
     }
-  };
+  }, [scanCode, scanItem, defaultRate]);
 
-  const addLine = () => {
+  const addLine = useCallback(() => {
     const hasIncomplete = lines.some((line) => !isLineComplete(line));
     if (hasIncomplete) {
       setFormError("Complete the current line item before adding another.");
@@ -312,13 +342,13 @@ export function InvoiceFormContent({
       return [...prev, createEmptyLine(defaultRate)];
     });
     setLineOpen(true);
-  };
+  }, [lines, defaultRate]);
 
-  const toggleLineExpanded = (index: number) => {
+  const toggleLineExpanded = useCallback((index: number) => {
     setLineExpanded((prev) => ({ ...prev, [index]: !prev[index] }));
-  };
+  }, []);
 
-  const removeLine = (targetIndex: number) => {
+  const removeLine = useCallback((targetIndex: number) => {
     setLines((prev) => prev.filter((_, i) => i !== targetIndex));
     setLineExpanded((prev) => {
       const next: Record<number, boolean> = {};
@@ -330,9 +360,9 @@ export function InvoiceFormContent({
       if (Object.keys(next).length === 0) next[0] = true;
       return next;
     });
-  };
+  }, []);
 
-  const addPaymentRow = () => {
+  const addPaymentRow = useCallback(() => {
     const hasIncomplete = payments.some((payment) => !isPaymentComplete(payment));
     if (hasIncomplete) {
       setFormError("Complete the current payment row before adding another.");
@@ -342,9 +372,9 @@ export function InvoiceFormContent({
     setFormError(null);
     setPayments((prev) => [...prev, createEmptyPayment()]);
     setPaymentOpen(true);
-  };
+  }, [payments]);
 
-  const submitInvoice = async (mode: "draft" | "issue") => {
+  const submitInvoice = useCallback(async (mode: "draft" | "issue") => {
     setFormError(null);
 
     const filteredLines = lines.filter((line) => line.description.trim() && Number(line.net_wt) > 0);
@@ -370,6 +400,7 @@ export function InvoiceFormContent({
       lines: filteredLines.map((line) => ({
         item: line.item || undefined,
         description: line.description,
+        huid: line.huid,
         hsn_code: line.hsn_code,
         metal_code: line.metal_code,
         purity_code: line.purity_code,
@@ -412,7 +443,9 @@ export function InvoiceFormContent({
     } catch {
       setFormError("Could not save invoice. Check values and try again.");
     }
-  };
+  }, [lines, payments, oldGoldRows, invoiceType, referenceInvoiceId, customerId,
+      sellerStateCode, placeStateCode, discountAmount, notes,
+      createInvoice, issueInvoice, onSuccess, router]);
 
   const preview = calculateState.data;
 
@@ -437,85 +470,134 @@ export function InvoiceFormContent({
         summary={invoiceType === "CREDIT_NOTE" ? "Credit note details" : "Invoice details"}
       >
         <div className="space-y-3">
-          <Select
-            label="Document type"
-            value={invoiceType}
-            onChange={(event) => setInvoiceType(event.target.value as InvoiceType)}
-          >
-            <option value="TAX_INVOICE">Tax invoice</option>
-            <option value="ESTIMATE">Estimate</option>
-            <option value="CASH_MEMO">Cash memo</option>
-            <option value="NON_GST">Non GST</option>
-            <option value="CREDIT_NOTE">Credit note</option>
-          </Select>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <Select
+              label="Document type"
+              value={invoiceType}
+              onChange={(event) => setInvoiceType(event.target.value as InvoiceType)}
+            >
+              {INVOICE_TYPE_FORM_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </Select>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Input
-              label="Seller state"
-              value={sellerStateCode}
-              onChange={(event) => setSellerStateCode(event.target.value.slice(0, 2))}
-              placeholder="27"
-            />
-            <Input
-              label="Place of supply"
-              value={placeStateCode}
-              onChange={(event) => setPlaceStateCode(event.target.value.slice(0, 2))}
-              placeholder="27"
-            />
+            <div className="grid grid-cols-2 gap-3">
+              <Select
+                label="Seller state"
+                value={sellerStateCode}
+                onChange={(event) => setSellerStateCode(event.target.value)}
+              >
+                {INDIAN_STATE_CODES.map((s) => (
+                  <option key={s.code} value={s.code}>{s.label}</option>
+                ))}
+              </Select>
+              <Select
+                label="Place of supply"
+                value={placeStateCode}
+                onChange={(event) => setPlaceStateCode(event.target.value)}
+              >
+                {INDIAN_STATE_CODES.map((s) => (
+                  <option key={s.code} value={s.code}>{s.label}</option>
+                ))}
+              </Select>
+            </div>
           </div>
 
           {invoiceType === "CREDIT_NOTE" ? (
-            <Input
-              label="Reference invoice ID"
-              value={referenceInvoiceId}
-              onChange={(event) => setReferenceInvoiceId(event.target.value)}
-              placeholder="Paste original invoice ID"
-            />
+            <div className="relative">
+              <Input
+                label="Reference invoice (original)"
+                value={refSearch}
+                onChange={(event) => {
+                  setRefSearch(event.target.value);
+                  setRefDropdownOpen(true);
+                  if (!event.target.value.trim()) {
+                    setReferenceInvoiceId("");
+                    setReferenceInvoiceNo("");
+                  }
+                }}
+                onFocus={() => setRefDropdownOpen(true)}
+                onBlur={() => setTimeout(() => setRefDropdownOpen(false), 150)}
+                placeholder="Search by voucher no. or customer name"
+              />
+              {referenceInvoiceNo && !refSearch ? (
+                <div className="mt-1.5 flex items-center gap-2">
+                  <span className="text-xs px-2 py-1 rounded-full bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 font-medium">
+                    {referenceInvoiceNo}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => { setReferenceInvoiceId(""); setReferenceInvoiceNo(""); }}
+                    className="text-xs text-muted hover:text-danger-600 transition-colors"
+                  >
+                    ✕ Clear
+                  </button>
+                </div>
+              ) : null}
+              {refDropdownOpen && refSearch.trim().length > 0 ? (
+                <div className="absolute z-20 top-full left-0 right-0 mt-1 rounded-xl border border-border bg-surface shadow-xl overflow-hidden max-h-52 overflow-y-auto">
+                  {(refInvoiceResults?.results ?? []).length === 0 ? (
+                    <div className="px-4 py-3 text-sm text-muted">No issued invoices found</div>
+                  ) : null}
+                  {(refInvoiceResults?.results ?? []).map((inv) => (
+                    <button
+                      key={inv.id}
+                      type="button"
+                      onMouseDown={() => {
+                        setReferenceInvoiceId(inv.id);
+                        setReferenceInvoiceNo(inv.voucher_no || inv.id);
+                        setRefSearch("");
+                        setRefDropdownOpen(false);
+                      }}
+                      className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface2 transition-colors"
+                    >
+                      <span className="font-medium text-text">{inv.voucher_no || "Draft"}</span>
+                      <span className="text-muted ml-2">{inv.customer_name || "Walk-in"}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           ) : null}
 
-          <div className="space-y-2">
+          <CustomerSearchSelect
+            value={customerId}
+            onChange={(id) => setCustomerId(id)}
+            label="Customer"
+            placeholder="Search by name or mobile (leave empty for walk-in)"
+            showSelectedName={true}
+          />
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <Input
-              label="Search customer"
-              value={customerSearch}
-              onChange={(event) => setCustomerSearch(event.target.value)}
-              placeholder="Name or mobile"
+              label="Discount amount"
+              type="number"
+              step="0.01"
+              min="0"
+              value={discountAmount}
+              onChange={(event) => setDiscountAmount(event.target.value)}
             />
-            <Select label="Customer" value={customerId} onChange={(event) => setCustomerId(event.target.value)}>
-              <option value="">Walk-in customer</option>
-              {(customerList?.results ?? []).map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.name} - {customer.mobile}
-                </option>
-              ))}
-            </Select>
+
+            <div className="space-y-2">
+              <Input
+                label="Scan item code"
+                value={scanCode}
+                onChange={(event) => setScanCode(event.target.value)}
+                placeholder="Barcode / SKU / HUID"
+                helperText={scanError ?? undefined}
+                error={scanError ?? undefined}
+              />
+              <Button
+                type="button"
+                onClick={handleScan}
+                loading={scanState.isFetching}
+                disabled={!scanCode.trim()}
+                fullWidth
+              >
+                Scan and fill first line
+              </Button>
+            </div>
           </div>
-
-          <Input
-            label="Discount amount"
-            type="number"
-            step="0.01"
-            min="0"
-            value={discountAmount}
-            onChange={(event) => setDiscountAmount(event.target.value)}
-          />
-
-          <Input
-            label="Scan item code"
-            value={scanCode}
-            onChange={(event) => setScanCode(event.target.value)}
-            placeholder="Barcode / SKU / HUID"
-            helperText={scanError ?? undefined}
-            error={scanError ?? undefined}
-          />
-          <Button
-            type="button"
-            onClick={handleScan}
-            loading={scanState.isFetching}
-            disabled={!scanCode.trim()}
-            fullWidth
-          >
-            Scan and fill first line
-          </Button>
 
           <Textarea
             label="Notes"
@@ -534,8 +616,8 @@ export function InvoiceFormContent({
         onToggle={() => setLineOpen((prev) => !prev)}
         summary={lineTotal > 0 ? `${lineTotal} item(s) added` : "No line items yet"}
         action={(
-          <Button type="button" size="sm" className="min-h-11" onClick={addLine} disabled={hasIncompleteLine}>
-            Add line item
+          <Button type="button" size="sm" onClick={addLine} disabled={hasIncompleteLine} leftIcon={<PlusIcon />}>
+            Add line
           </Button>
         )}
       >
@@ -552,9 +634,10 @@ export function InvoiceFormContent({
                   key={`line-${index}`}
                   index={index}
                   line={line}
-                  items={inventoryItems}
+                  invoiceType={invoiceType}
                   computedLine={preview?.computed_lines?.[index]}
                   onChange={handleLinePatch}
+                  onItemSelect={handleItemSelect}
                   onRemove={removeLine}
                   disableRemove={lines.length <= 1}
                   collapsible
@@ -573,8 +656,8 @@ export function InvoiceFormContent({
         onToggle={() => setPaymentOpen((prev) => !prev)}
         summary={payments.length > 0 ? `${payments.length} payment row(s)` : "No payment rows yet"}
         action={(
-          <Button type="button" size="sm" className="min-h-11" variant="secondary" onClick={addPaymentRow} disabled={hasIncompletePayment}>
-            Add payment
+          <Button type="button" size="sm" variant="secondary" onClick={addPaymentRow} disabled={hasIncompletePayment} leftIcon={<PlusIcon />}>
+            Add
           </Button>
         )}
       >
@@ -606,7 +689,6 @@ export function InvoiceFormContent({
           <Button
             type="button"
             size="sm"
-            className="min-h-11"
             variant="secondary"
             onClick={() => {
               const hasIncomplete = oldGoldRows.some((row) => !isOldGoldComplete(row));
@@ -620,8 +702,9 @@ export function InvoiceFormContent({
               setOldGoldOpen(true);
             }}
             disabled={hasIncompleteOldGold}
+            leftIcon={<PlusIcon />}
           >
-            Add old-gold row
+            Add
           </Button>
         )}
       >
@@ -637,7 +720,7 @@ export function InvoiceFormContent({
                 const deduction = calcOldGoldDeduction(row.gross_wt, row.tested_purity, row.buy_rate_per_gram);
                 return (
                   <div key={`og-${index}`} className="rounded-2xl border border-border bg-surface p-4">
-                    <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                       <Input
                         label="Metal"
                         value={row.metal_code}
@@ -674,16 +757,14 @@ export function InvoiceFormContent({
                         onChange={(event) => setOldGoldRows((prev) => prev.map((item, i) => (i === index ? { ...item, buy_rate_per_gram: event.target.value } : item)))}
                       />
                       <div className="flex items-end">
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="min-h-11"
-                          variant="secondary"
+                        <IconButton
+                          variant="danger"
+                          label="Remove old-gold row"
                           onClick={() => setOldGoldRows((prev) => prev.filter((_, i) => i !== index))}
                           disabled={oldGoldRows.length === 1}
                         >
-                          Remove
-                        </Button>
+                          <TrashIcon />
+                        </IconButton>
                       </div>
                     </div>
                     <p className="mt-2 text-xs text-muted">

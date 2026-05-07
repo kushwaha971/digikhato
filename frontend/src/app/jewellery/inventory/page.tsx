@@ -5,19 +5,25 @@ import { Suspense, useCallback, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { StickyGlobalSearchBar } from "@/components/business/StickyGlobalSearchBar";
+import { HUIDTrackingView } from "@/components/jewellery/inventory/HUIDTrackingView";
+import { PurityTrackingView } from "@/components/jewellery/inventory/PurityTrackingView";
 import { ModulePlaceholder } from "@/components/jewellery/shared/ModulePlaceholder";
 import { StatusBadge } from "@/components/jewellery/shared/StatusBadge";
 import { Screen } from "@/components/layout/Screen";
 import { Button } from "@/components/ui/Button";
+import { PlusIcon } from "@/components/ui/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ResponsiveFilterPanel, FilterSelect } from "@/components/ui/ResponsiveFilterPanel";
 import { SkeletonList } from "@/components/ui/Skeleton";
+import { useDebounce } from "@/hooks/useDebounce";
 import { useInfiniteItems } from "@/hooks/useInfiniteItems";
 import { ROUTES } from "@/lib/routes";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import type { JwlItem } from "@/store/jewellery-api";
 import { useListItemsQuery } from "@/store/jewellery-api";
+import { setInventoryFilters, resetInventoryFilters } from "@/store/jewellery-filters-slice";
 
-const PLACEHOLDER_VIEWS = new Set(["purity", "huid", "stock-take", "chain-of-custody"]);
+const PLACEHOLDER_VIEWS = new Set(["stock-take", "chain-of-custody"]);
 
 const VIEW_CONFIG: Record<string, { title: string; description: string }> = {
   "item-master": {
@@ -73,18 +79,21 @@ function ItemCard({ item }: { item: JwlItem }) {
 
 function ItemMasterPage() {
   const router = useRouter();
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
+  const dispatch = useAppDispatch();
+  const filters = useAppSelector((state) => state.jewelleryFilters.inventory);
+  const { search, status, page } = filters;
+
   const [draftStatus, setDraftStatus] = useState(status);
-  const [page, setPage] = useState(1);
+
+  const debouncedSearch = useDebounce(search, 300);
 
   const { data, isFetching } = useListItemsQuery({
     page,
-    search: search.trim() || undefined,
+    search: debouncedSearch.trim() || undefined,
     status: status || undefined,
   });
 
-  const loadMore = useCallback(() => setPage((p) => p + 1), []);
+  const loadMore = useCallback(() => dispatch(setInventoryFilters({ page: page + 1 })), [dispatch, page]);
   const { items, hasMore, sentinelRef } = useInfiniteItems<JwlItem>(data, isFetching, page, loadMore);
 
   const hasFilters = Boolean(search.trim() || status);
@@ -100,13 +109,11 @@ function ItemMasterPage() {
             title="Filter inventory"
             hasActiveFilters={Boolean(status)}
             onApply={() => {
-              setStatus(draftStatus);
-              setPage(1);
+              dispatch(setInventoryFilters({ status: draftStatus, page: 1 }));
             }}
             onReset={() => {
-              setStatus("");
+              dispatch(resetInventoryFilters());
               setDraftStatus("");
-              setPage(1);
             }}
           >
             <FilterSelect label="Status" value={draftStatus} onChange={(event) => setDraftStatus(event.target.value)}>
@@ -120,7 +127,7 @@ function ItemMasterPage() {
           </ResponsiveFilterPanel>
 
           <Link href="/jewellery/inventory/new">
-            <Button variant="success" size="sm">Add item</Button>
+            <Button variant="success" size="sm" leftIcon={<PlusIcon />}>Add item</Button>
           </Link>
         </div>
       )}
@@ -129,8 +136,7 @@ function ItemMasterPage() {
         <StickyGlobalSearchBar
           value={search}
           onChange={(value) => {
-            setSearch(value);
-            setPage(1);
+            dispatch(setInventoryFilters({ search: value, page: 1 }));
           }}
           placeholder="Search by SKU, HUID, barcode"
           sticky={false}
@@ -173,6 +179,32 @@ function InventoryPageInner() {
   const searchParams = useSearchParams();
   const rawView = searchParams.get("view") ?? "item-master";
   const view = rawView in VIEW_CONFIG ? rawView : "item-master";
+
+  if (view === "purity") {
+    const config = VIEW_CONFIG.purity;
+    return (
+      <Screen
+        title={config.title}
+        subtitle={config.description}
+        backHref={ROUTES.app.jewellery.dashboard}
+      >
+        <PurityTrackingView />
+      </Screen>
+    );
+  }
+
+  if (view === "huid") {
+    const config = VIEW_CONFIG.huid;
+    return (
+      <Screen
+        title={config.title}
+        subtitle={config.description}
+        backHref={ROUTES.app.jewellery.dashboard}
+      >
+        <HUIDTrackingView />
+      </Screen>
+    );
+  }
 
   if (PLACEHOLDER_VIEWS.has(view)) {
     const config = VIEW_CONFIG[view];

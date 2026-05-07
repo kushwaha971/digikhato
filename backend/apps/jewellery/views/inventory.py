@@ -1,12 +1,15 @@
 """Jewellery inventory viewsets (Phase B-1.3)."""
 
 from django.db import transaction
+from django.db.models import Count, Q, Sum
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from apps.common.constants import P_INVENTORY_WRITEOFF
 from apps.jewellery.models.inventory import Item, StockMovement, StockTake, StockTakeLine, Transfer
+from apps.jewellery.permissions import HasJewelleryPermission
 from apps.jewellery.serializers.inventory import (
     ItemDetailSerializer,
     ItemListSerializer,
@@ -30,6 +33,7 @@ from apps.users.views import get_effective_tenant
 
 class ItemViewSet(JewelleryTenantScopedViewSet):
     queryset = Item.objects.select_related("design__category", "metal", "purity", "tenant")
+    inventory_writeoff_permission = HasJewelleryPermission(P_INVENTORY_WRITEOFF)
 
     def get_serializer_class(self):
         if self.action == "list":
@@ -45,23 +49,33 @@ class ItemViewSet(JewelleryTenantScopedViewSet):
             qs = qs.filter(branch_name=branch)
         if item_status := params.get("status"):
             qs = qs.filter(status=item_status)
-        if purity := params.get("purity"):
+        if purity := params.get("purity") or params.get("purity_code"):
             qs = qs.filter(purity__code__iexact=purity)
+        if metal_code := params.get("metal_code"):
+            qs = qs.filter(metal__code__iexact=metal_code)
+        if hallmark_status := params.get("hallmark_status"):
+            qs = qs.filter(hallmark_status=hallmark_status)
         if design := params.get("design"):
             qs = qs.filter(design_id=design)
+        if design_name := params.get("design_name"):
+            qs = qs.filter(design__name__icontains=design_name)
         if search := params.get("search"):
             qs = qs.filter(
-                sku__icontains=search
-            ) | qs.filter(
-                barcode__icontains=search
-            ) | qs.filter(
-                huid__icontains=search
+                Q(sku__icontains=search)
+                | Q(barcode__icontains=search)
+                | Q(huid__icontains=search)
+                | Q(design__name__icontains=search)
             )
         return qs
 
     @action(detail=True, methods=["post"], url_path="write-off")
     @transaction.atomic
     def write_off(self, request, pk=None):
+        if not self.inventory_writeoff_permission.has_permission(request, self):
+            return Response(
+                {"detail": "You do not have inventory write-off permission."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         item = self.get_object()
         reason = request.data.get("reason", "")
         try:
@@ -82,6 +96,36 @@ class ItemViewSet(JewelleryTenantScopedViewSet):
 
         serializer = ItemDetailSerializer(item, context={"request": request})
         return Response(serializer.data)
+
+    @action(detail=False, methods=["get"], url_path="purity-summary")
+    def purity_summary(self, request):
+        params = request.query_params
+        qs = self.get_queryset().filter(status="IN_STOCK")
+        if metal_code := params.get("metal_code"):
+            qs = qs.filter(metal__code__iexact=metal_code)
+
+        grouped = (
+            qs.values("metal__code", "purity__code")
+            .annotate(
+                item_count=Count("id"),
+                gross_wt_total=Sum("gross_wt"),
+                net_wt_total=Sum("net_wt"),
+                charge_wt_total=Sum("charge_wt"),
+            )
+            .order_by("metal__code", "purity__code")
+        )
+        result = [
+            {
+                "metal_code": row["metal__code"],
+                "purity_code": row["purity__code"],
+                "item_count": row["item_count"],
+                "gross_wt_total": row["gross_wt_total"] or 0,
+                "net_wt_total": row["net_wt_total"] or 0,
+                "charge_wt_total": row["charge_wt_total"] or 0,
+            }
+            for row in grouped
+        ]
+        return Response(result)
 
 
 class StockMovementViewSet(JewelleryTenantScopedViewSet):

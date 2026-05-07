@@ -3,15 +3,25 @@
 import { ReactNode, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
+type DrawerSize = "md" | "lg" | "xl" | "2xl";
+
+const desktopSizeClasses: Record<DrawerSize, string> = {
+  md:  "max-w-md",
+  lg:  "max-w-lg",
+  xl:  "max-w-xl",
+  "2xl": "w-[65vw] max-w-4xl",
+};
+
 interface DrawerProps {
   readonly open: boolean;
   readonly onClose: () => void;
   readonly title: string;
   readonly children: ReactNode;
   readonly footer?: ReactNode;
+  readonly size?: DrawerSize;
 }
 
-export function Drawer({ open, onClose, title, children, footer }: DrawerProps) {
+export function Drawer({ open, onClose, title, children, footer, size = "md" }: DrawerProps) {
   const [mounted, setMounted] = useState(false);
   const [visible, setVisible] = useState(false);
 
@@ -119,7 +129,7 @@ export function Drawer({ open, onClose, title, children, footer }: DrawerProps) 
         className={`
           hidden sm:flex flex-col
           absolute right-0 top-0 bottom-0
-          w-full max-w-md bg-surface shadow-2xl h-full
+          w-full ${desktopSizeClasses[size]} bg-surface shadow-2xl h-full
           ${transition}
           ${visible ? "translate-x-0" : "translate-x-full"}
         `}

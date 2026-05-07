@@ -1,4 +1,5 @@
 from decimal import Decimal
+from typing import Optional
 
 from django.db import models, transaction
 
@@ -15,7 +16,7 @@ def create_collection(
     loan_id: int,
     borrower_id: int,
     amount_paid: Decimal,
-    status: str | None,
+    status: Optional[str],
     payment_mode: str,
     reference_id: str,
     notes: str,
@@ -54,7 +55,7 @@ def update_collection(
     *,
     collection: Collection,
     amount_paid: Decimal,
-    status: str | None,
+    status: Optional[str],
     payment_mode: str,
     reference_id: str,
     notes: str,
@@ -97,7 +98,7 @@ def delete_collection(*, collection: Collection):
     _sync_due_alert_notifications(loan)
 
 
-def _resolve_collection_status(*, status: str | None, loan: Loan, amount_paid: Decimal) -> str:
+def _resolve_collection_status(*, status: Optional[str], loan: Loan, amount_paid: Decimal) -> str:
     if status in CollectionStatus.values:
         return status
 

@@ -43,7 +43,7 @@ class SalesInvoiceLineSerializer(serializers.ModelSerializer):
     class Meta:
         model = SalesInvoiceLine
         fields = [
-            "id", "line_no", "item", "description", "hsn_code",
+            "id", "line_no", "item", "description", "huid", "hsn_code",
             "metal_code", "purity_code", "gross_wt", "net_wt", "stone_wt",
             "rate_per_gram", "metal_value",
             "making_mode", "making_rate", "making_charge",
@@ -66,18 +66,20 @@ class SalesInvoiceSerializer(serializers.ModelSerializer):
     payments = SalesInvoicePaymentSerializer(many=True, read_only=True)
     old_gold_purchases = OldGoldPurchaseSerializer(many=True, read_only=True)
     customer_name = serializers.CharField(source="customer.name", read_only=True, default="")
+    customer_gstin = serializers.CharField(source="customer.gstin", read_only=True, default="")
     reference_invoice_no = serializers.CharField(source="reference_invoice.voucher_no", read_only=True, default="")
 
     class Meta:
         model = SalesInvoice
         fields = [
             "id", "voucher_no", "voucher_date", "invoice_type", "status",
-            "customer", "customer_name",
+            "customer", "customer_name", "customer_gstin",
             "reference_invoice", "reference_invoice_no",
             "place_of_supply_state_code", "seller_state_code", "is_inter_state",
             "gross_amount", "discount_amount", "taxable_amount", "stone_value",
             "cgst", "sgst", "igst", "hallmark_gst", "round_off", "total_amount",
             "advance_used", "paid_amount", "balance_amount",
+            "e_invoice_irn", "e_invoice_qr", "e_invoice_is_simulated",
             "notes", "issued_at", "cancelled_at", "cancel_reason",
             "branch_name", "created_at", "updated_at",
             "lines", "payments", "old_gold_purchases",
@@ -87,6 +89,7 @@ class SalesInvoiceSerializer(serializers.ModelSerializer):
             "gross_amount", "taxable_amount", "stone_value",
             "cgst", "sgst", "igst", "hallmark_gst", "round_off", "total_amount",
             "advance_used", "paid_amount", "balance_amount",
+            "e_invoice_irn", "e_invoice_qr", "e_invoice_is_simulated",
             "issued_at", "cancelled_at", "created_at", "updated_at",
         ]
 
@@ -96,6 +99,7 @@ class SalesInvoiceSerializer(serializers.ModelSerializer):
 class InvoiceLineWriteSerializer(serializers.Serializer):
     item = serializers.UUIDField(required=False, allow_null=True)
     description = serializers.CharField(required=False, default="")
+    huid = serializers.CharField(required=False, default="", allow_blank=True, max_length=6)
     hsn_code = serializers.CharField(required=False, default="")
     metal_code = serializers.CharField(required=False, default="")
     purity_code = serializers.CharField(required=False, default="")
@@ -158,3 +162,8 @@ class CalculateInvoiceSerializer(serializers.Serializer):
 
 class CancelInvoiceSerializer(serializers.Serializer):
     reason = serializers.CharField(min_length=3, max_length=500)
+
+
+class SendInvoiceSerializer(serializers.Serializer):
+    channel = serializers.ChoiceField(choices=["WA", "SMS", "EMAIL"])
+    to = serializers.CharField(min_length=3, max_length=120)

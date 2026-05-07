@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+from typing import Optional
 
 from apps.collections.models import Collection
 from apps.common.constants import RoleChoices
@@ -64,7 +65,7 @@ def apply_loan_filters(qs, *, params: dict):
     return qs
 
 
-def get_overdue_loans(qs, *, today: date | None = None):
+def get_overdue_loans(qs, *, today: Optional[date] = None):
     return overdue_loans_queryset(qs, today=today)
 
 

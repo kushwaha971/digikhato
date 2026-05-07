@@ -6,11 +6,12 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from apps.common.constants import JwlRoleCode, ModuleCode
 from apps.jewellery.models.master import Metal, Purity
 from apps.jewellery.models.rates import RateHistory, TenantRate
 from apps.jewellery.services.rates import calculate_gold_rate, get_live_rates, record_rate_override
 from apps.onboarding.models import BusinessProfile
-from apps.users.models import User
+from apps.users.models import User, UserModuleRole
 
 
 def _make_tenant(mobile, name):
@@ -24,6 +25,14 @@ def _make_tenant(mobile, name):
         owner=user,
         business_name=name,
         feature_flags={"jewellery": True},
+    )
+    UserModuleRole.objects.create(
+        user=user,
+        module=ModuleCode.JEWELLERY,
+        role_code=JwlRoleCode.ADMIN,
+        branch_name="",
+        granted_by=user,
+        is_active=True,
     )
     return user
 
@@ -41,7 +50,7 @@ def _make_metal_purity(tenant):
 
 
 class GoldRateFormulaTests(APITestCase):
-    """§7.1 formula: MCX 68500 / 22K 91.6% / markup 1.5% → ₹6,373.00"""
+    """§7.1 formula: MCX 68500 / 22K 91.6% / markup 1.5% → ₹6,375.09"""
 
     def test_spec_example_matches(self):
         result = calculate_gold_rate(
@@ -49,7 +58,7 @@ class GoldRateFormulaTests(APITestCase):
             purity_pct=Decimal("91.600"),
             markup_pct=Decimal("1.5"),
         )
-        self.assertEqual(result, Decimal("6373.00"))
+        self.assertEqual(result, Decimal("6375.09"))
 
     def test_zero_markup(self):
         result = calculate_gold_rate(
@@ -57,7 +66,7 @@ class GoldRateFormulaTests(APITestCase):
             purity_pct=Decimal("91.600"),
             markup_pct=Decimal("0"),
         )
-        self.assertEqual(result, Decimal("6278.78"))
+        self.assertEqual(result, Decimal("6280.88"))
 
     def test_24k_no_markup(self):
         result = calculate_gold_rate(

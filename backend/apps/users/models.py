@@ -138,6 +138,7 @@ class UserModuleRole(TimeStampedModel):
         blank=True,
         related_name="granted_module_roles",
     )
+    expires_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
 
     class Meta:

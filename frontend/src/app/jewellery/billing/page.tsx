@@ -1,11 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useCallback, useState } from "react";
+import { Suspense, useCallback, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { StickyGlobalSearchBar } from "@/components/business/StickyGlobalSearchBar";
 import { InvoiceFormContent } from "@/components/jewellery/billing/InvoiceFormContent";
+import { PrintTemplatesView } from "@/components/jewellery/billing/PrintTemplatesView";
+import { SplitPaymentView } from "@/components/jewellery/billing/SplitPaymentView";
+import { CustomerSearchSelect } from "@/components/jewellery/shared/CustomerSearchSelect";
 import { ModulePlaceholder } from "@/components/jewellery/shared/ModulePlaceholder";
 import { Screen } from "@/components/layout/Screen";
 import { Badge } from "@/components/ui/Badge";
@@ -18,13 +21,17 @@ import {
   ResponsiveFilterPanel,
 } from "@/components/ui/ResponsiveFilterPanel";
 import { SkeletonList } from "@/components/ui/Skeleton";
+import { INVOICE_STATUS_OPTIONS, invoiceStatusVariant } from "@/constants/jewellery";
+import { useDebounce } from "@/hooks/useDebounce";
 import { useInfiniteItems } from "@/hooks/useInfiniteItems";
 import { ROUTES } from "@/lib/routes";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import type { InvoiceStatus, InvoiceType, JwlInvoice } from "@/store/jewellery-api";
-import { useListInvoicesQuery } from "@/store/jewellery-api";
+import { useGenerateEInvoiceMutation, useListInvoicesQuery } from "@/store/jewellery-api";
+import { setBillingFilters, resetBillingFilters } from "@/store/jewellery-filters-slice";
 import { formatINRCurrency } from "@/utils/jewellery/formulas";
 
-const PLACEHOLDER_VIEWS = new Set(["einvoice", "split-payment", "print", "messages"]);
+const PLACEHOLDER_VIEWS = new Set(["messages-placeholder"]);
 
 const BILLING_VIEW_CONFIG: Record<string, { title: string; description: string }> = {
   default: {
@@ -64,12 +71,6 @@ const BILLING_VIEW_CONFIG: Record<string, { title: string; description: string }
     description: "Send invoice and payment links to customers via WhatsApp and SMS.",
   },
 };
-
-function invoiceStatusVariant(status: string): "success" | "danger" | "warning" {
-  if (status === "ISSUED") return "success";
-  if (status === "CANCELLED") return "danger";
-  return "warning";
-}
 
 function InvoiceListCard({ invoice }: { invoice: JwlInvoice }) {
   return (
@@ -114,16 +115,19 @@ function InvoiceListPanel({
   onOpenCreate: (type: InvoiceType) => void;
 }>) {
   const router = useRouter();
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<InvoiceStatus | "">("");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  const dispatch = useAppDispatch();
+  const filters = useAppSelector((state) => state.jewelleryFilters.billing);
+  const { search, status, customerId, dateFrom, dateTo, ordering, page } = filters;
 
-  const [draftStatus, setDraftStatus] = useState<InvoiceStatus | "">(status);
-  const [draftFromDate, setDraftFromDate] = useState(fromDate);
-  const [draftToDate, setDraftToDate] = useState(toDate);
+  // Draft state — edited in filter panel, committed on Apply
+  const [draftStatus, setDraftStatus] = useState<InvoiceStatus | "">(status as InvoiceStatus | "");
+  const [draftCustomer, setDraftCustomer] = useState(customerId);
+  const [draftFromDate, setDraftFromDate] = useState(dateFrom);
+  const [draftToDate, setDraftToDate] = useState(dateTo);
+  const [draftOrdering, setDraftOrdering] = useState<"-voucher_date" | "voucher_date">(ordering as "-voucher_date" | "voucher_date");
 
-  const [page, setPage] = useState(1);
+  const debouncedSearch = useDebounce(search, 300);
+
   const typeFilter: InvoiceType | undefined = view === "estimate"
     ? "ESTIMATE"
     : view === "sale-return"
@@ -133,32 +137,40 @@ function InvoiceListPanel({
   const { data, isFetching } = useListInvoicesQuery({
     page,
     type: typeFilter,
-    status: status || undefined,
-    from: fromDate || undefined,
-    to: toDate || undefined,
-    search: search.trim() || undefined,
+    status: (status || undefined) as InvoiceStatus | undefined,
+    customer: customerId || undefined,
+    from: dateFrom || undefined,
+    to: dateTo || undefined,
+    search: debouncedSearch.trim() || undefined,
+    ordering: ordering as "-voucher_date" | "voucher_date" | "-created_at" | "created_at" | undefined,
   });
 
-  const loadMore = useCallback(() => setPage((prev) => prev + 1), []);
+  const loadMore = useCallback(() => dispatch(setBillingFilters({ page: page + 1 })), [dispatch, page]);
   const { items, hasMore, sentinelRef } = useInfiniteItems<JwlInvoice>(data, isFetching, page, loadMore);
 
-  const hasFilters = Boolean(status || fromDate || toDate || search.trim());
+  const hasFilters = useMemo(
+    () => Boolean(search || status || customerId || dateFrom || dateTo),
+    [search, status, customerId, dateFrom, dateTo],
+  );
 
   const resetFilters = () => {
-    setStatus("");
-    setFromDate("");
-    setToDate("");
+    dispatch(resetBillingFilters());
     setDraftStatus("");
+    setDraftCustomer("");
     setDraftFromDate("");
     setDraftToDate("");
-    setPage(1);
+    setDraftOrdering("-voucher_date");
   };
 
   const applyFilters = () => {
-    setStatus(draftStatus);
-    setFromDate(draftFromDate);
-    setToDate(draftToDate);
-    setPage(1);
+    dispatch(setBillingFilters({
+      status: draftStatus,
+      customerId: draftCustomer,
+      dateFrom: draftFromDate,
+      dateTo: draftToDate,
+      ordering: draftOrdering,
+      page: 1,
+    }));
   };
 
   const isCreditNoteView = view === "sale-return";
@@ -178,7 +190,7 @@ function InvoiceListPanel({
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <ResponsiveFilterPanel
             title="Filter invoices"
-            hasActiveFilters={Boolean(status || fromDate || toDate)}
+            hasActiveFilters={Boolean(status || customerId || dateFrom || dateTo)}
             onApply={applyFilters}
             onReset={resetFilters}
           >
@@ -187,11 +199,17 @@ function InvoiceListPanel({
               value={draftStatus}
               onChange={(event) => setDraftStatus(event.target.value as InvoiceStatus | "")}
             >
-              <option value="">All</option>
-              <option value="DRAFT">Draft</option>
-              <option value="ISSUED">Issued</option>
-              <option value="CANCELLED">Cancelled</option>
+              {INVOICE_STATUS_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
             </FilterSelect>
+
+            <CustomerSearchSelect
+              value={draftCustomer}
+              onChange={(id) => setDraftCustomer(id)}
+              label="Customer"
+              showSelectedName={true}
+            />
 
             <div className="grid grid-cols-1 gap-2">
               <DatePicker
@@ -209,6 +227,15 @@ function InvoiceListPanel({
                 placeholder="To date"
               />
             </div>
+
+            <FilterSelect
+              label="Date order"
+              value={draftOrdering}
+              onChange={(e) => setDraftOrdering(e.target.value as "-voucher_date" | "voucher_date")}
+            >
+              <option value="-voucher_date">Newest first</option>
+              <option value="voucher_date">Oldest first</option>
+            </FilterSelect>
           </ResponsiveFilterPanel>
 
           <Button
@@ -223,8 +250,7 @@ function InvoiceListPanel({
         <StickyGlobalSearchBar
           value={search}
           onChange={(value) => {
-            setSearch(value);
-            setPage(1);
+            dispatch(setBillingFilters({ search: value, page: 1 }));
           }}
           placeholder="Search by customer, mobile, or voucher"
           sticky={false}
@@ -281,12 +307,21 @@ function BillingPageInner() {
   };
 
   const drawerTitle = drawerType === "CREDIT_NOTE" ? "New Credit Note" : drawerType === "ESTIMATE" ? "New Estimate" : "New Invoice";
+  const [generateEInvoice, eInvoiceState] = useGenerateEInvoiceMutation();
+  const messagesInvoices = useListInvoicesQuery(
+    { page: 1, status: "ISSUED" },
+    { skip: view !== "messages" },
+  );
+  const eInvoiceInvoices = useListInvoicesQuery(
+    { page: 1, type: "TAX_INVOICE", status: "ISSUED" },
+    { skip: view !== "einvoice" },
+  );
 
   if (view === "tax-invoice" || view === "estimate" || view === "sale-return") {
     return (
       <>
         <InvoiceListPanel view={view} onOpenCreate={openCreateDrawer} />
-        <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} title={drawerTitle}>
+        <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} title={drawerTitle} size="2xl">
           <InvoiceFormContent
             initialInvoiceType={drawerType}
             seedOldGold={drawerSeedOldGold}
@@ -316,7 +351,7 @@ function BillingPageInner() {
             </Button>
           </div>
         </Screen>
-        <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} title={drawerTitle}>
+        <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} title={drawerTitle} size="2xl">
           <InvoiceFormContent
             initialInvoiceType={drawerType}
             seedOldGold={drawerSeedOldGold}
@@ -331,9 +366,105 @@ function BillingPageInner() {
     );
   }
 
+  if (view === "split-payment") {
+    return (
+      <Screen
+        title="Split payment modes"
+        subtitle="Accept mixed tender modes and reconcile receipts against invoices."
+        backHref={ROUTES.app.jewellery.billing}
+      >
+        <SplitPaymentView onCreateInvoice={() => openCreateDrawer("TAX_INVOICE")} />
+      </Screen>
+    );
+  }
+
+  if (view === "print") {
+    return (
+      <Screen
+        title="Print templates"
+        subtitle="Manage invoice print templates and export layout preferences."
+        backHref={ROUTES.app.jewellery.billing}
+      >
+        <PrintTemplatesView onPrintInvoice={(id) => router.push(`/jewellery/billing/${id}`)} />
+      </Screen>
+    );
+  }
+
   if (PLACEHOLDER_VIEWS.has(view)) {
     const config = BILLING_VIEW_CONFIG[view];
     return <ModulePlaceholder title={config.title} description={config.description} presetKey={config.title} />;
+  }
+
+  if (view === "messages") {
+    return (
+      <Screen
+        title="WhatsApp / SMS send"
+        subtitle="Open an issued invoice and send it via WhatsApp, SMS, or Email."
+        backHref={ROUTES.app.jewellery.billing}
+      >
+        {messagesInvoices.isFetching ? <SkeletonList count={4} /> : null}
+        <div className="space-y-3">
+          {(messagesInvoices.data?.results ?? []).map((invoice) => (
+            <div key={invoice.id} className="app-panel rounded-2xl p-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="font-semibold text-text">{invoice.voucher_no || "Issued invoice"}</p>
+                <p className="text-xs text-muted mt-1">{invoice.customer_name || "Walk-in"} · {formatINRCurrency(invoice.total_amount)}</p>
+              </div>
+              <Link href={`/jewellery/billing/${invoice.id}`}>
+                <Button type="button" size="sm" className="min-h-11" variant="secondary">
+                  Open share
+                </Button>
+              </Link>
+            </div>
+          ))}
+        </div>
+      </Screen>
+    );
+  }
+
+  if (view === "einvoice") {
+    return (
+      <Screen
+        title="E-invoice (IRN+QR)"
+        subtitle="Generate IRN and QR for issued tax invoices."
+        backHref={ROUTES.app.jewellery.billing}
+      >
+        {eInvoiceInvoices.isFetching ? <SkeletonList count={4} /> : null}
+        <div className="space-y-3">
+          {(eInvoiceInvoices.data?.results ?? []).map((invoice) => (
+            <div key={invoice.id} className="app-panel rounded-2xl p-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="font-semibold text-text">{invoice.voucher_no || "Issued invoice"}</p>
+                <p className="text-xs text-muted mt-1">
+                  {invoice.customer_name || "Walk-in"} · {invoice.e_invoice_irn ? "IRN generated" : "IRN pending"}
+                </p>
+                {invoice.e_invoice_irn ? (
+                  <p className="text-[11px] text-muted mt-1 break-all">IRN: {invoice.e_invoice_irn}</p>
+                ) : null}
+              </div>
+              <div className="flex items-center gap-2">
+                {!invoice.e_invoice_irn ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="min-h-11"
+                    onClick={() => generateEInvoice(invoice.id)}
+                    loading={eInvoiceState.isLoading}
+                  >
+                    Generate IRN
+                  </Button>
+                ) : null}
+                <Link href={`/jewellery/billing/${invoice.id}`}>
+                  <Button type="button" size="sm" className="min-h-11" variant="secondary">
+                    Open invoice
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Screen>
+    );
   }
 
   const fallback = BILLING_VIEW_CONFIG.default;

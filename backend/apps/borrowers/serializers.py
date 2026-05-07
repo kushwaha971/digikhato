@@ -11,6 +11,7 @@ from apps.users.models import User
 class BorrowerSerializer(serializers.ModelSerializer):
     accounts_count = serializers.SerializerMethodField()
     must_reset_password = serializers.SerializerMethodField(read_only=True)
+    temporary_password = serializers.SerializerMethodField(read_only=True)
     has_alert = serializers.BooleanField(read_only=True, default=False)
     location_name = serializers.CharField(source="location.name", read_only=True, default=None)
 
@@ -35,6 +36,7 @@ class BorrowerSerializer(serializers.ModelSerializer):
             "accounts_count",
             "has_alert",
             "must_reset_password",
+            "temporary_password",
             "created_at",
             "updated_at",
         ]
@@ -48,6 +50,10 @@ class BorrowerSerializer(serializers.ModelSerializer):
 
     def get_must_reset_password(self, obj):
         return bool(getattr(obj.user, "must_reset_password", False))
+
+    def get_temporary_password(self, obj):
+        # Return only the one-time generated password in the immediate create response.
+        return getattr(obj, "_temporary_password", None)
 
     def validate_user(self, value):
         request = self.context.get("request")
@@ -98,9 +104,14 @@ class BorrowerSerializer(serializers.ModelSerializer):
                     created_by=request.user if request and request.user.is_authenticated else None,
                     must_reset_password=True,
                 )
+                validated_data["_temporary_password"] = auto_password
 
         validated_data["user"] = linked_user
-        return super().create(validated_data)
+        temporary_password = validated_data.pop("_temporary_password", None)
+        borrower = super().create(validated_data)
+        if temporary_password:
+            setattr(borrower, "_temporary_password", temporary_password)
+        return borrower
 
     def update(self, instance, validated_data):
         return super().update(instance, validated_data)

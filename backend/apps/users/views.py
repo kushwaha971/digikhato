@@ -27,6 +27,7 @@ from apps.users.serializers import (
     UserPreferenceSerializer,
     UserSerializer,
 )
+from typing import Optional
 
 NOT_FOUND = {"detail": "Not found."}
 REFRESH_COOKIE = "refresh_token"
@@ -91,6 +92,17 @@ def _module_self_onboard_allowed(user, module: str) -> bool:
     return user.role in (RoleChoices.ADMIN, RoleChoices.COLLECTOR)
 
 
+def _active_module_roles_queryset(*, user=None, module: Optional[str] = None):
+    qs = UserModuleRole.objects.filter(is_active=True).filter(
+        Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
+    )
+    if user is not None:
+        qs = qs.filter(user=user)
+    if module:
+        qs = qs.filter(module=module)
+    return qs
+
+
 def _module_admin_flags(user, module: str) -> dict[str, bool]:
     if user.role == RoleChoices.SUPER_ADMIN:
         return {
@@ -103,11 +115,7 @@ def _module_admin_flags(user, module: str) -> dict[str, bool]:
     if module == ModuleCode.LOANS:
         can_manage = user.role == RoleChoices.ADMIN
     elif module == ModuleCode.JEWELLERY:
-        active_roles = UserModuleRole.objects.filter(
-            user=user,
-            module=ModuleCode.JEWELLERY,
-            is_active=True,
-        )
+        active_roles = _active_module_roles_queryset(user=user, module=ModuleCode.JEWELLERY)
         for role in active_roles:
             if "jwl.admin.manage" in JWL_ROLE_PERMISSIONS.get(role.role_code, []):
                 can_manage = True
@@ -138,9 +146,16 @@ def _activate_module_for_user(*, actor, target_user, module: str) -> dict:
             branch_name="",
             defaults={"granted_by": granted_by, "is_active": True},
         )
-        if not created and not role.is_active:
-            role.is_active = True
-            role.save(update_fields=["is_active"])
+        if not created:
+            updates = []
+            if not role.is_active:
+                role.is_active = True
+                updates.append("is_active")
+            if role.expires_at is not None:
+                role.expires_at = None
+                updates.append("expires_at")
+            if updates:
+                role.save(update_fields=updates)
         module_role_data = UserModuleRoleSerializer(role).data
 
     return {
@@ -552,7 +567,7 @@ class UserModuleRoleView(APIView):
         member = self._get_member(request, pk)
         if not member:
             return Response(NOT_FOUND, status=status.HTTP_404_NOT_FOUND)
-        roles = UserModuleRole.objects.filter(user=member, is_active=True)
+        roles = _active_module_roles_queryset(user=member)
         return Response(UserModuleRoleSerializer(roles, many=True).data)
 
     def post(self, request, pk):
@@ -563,15 +578,36 @@ class UserModuleRoleView(APIView):
 
         serializer = UserModuleRoleCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        role = UserModuleRole.objects.create(
+        validated = serializer.validated_data
+        role, created = UserModuleRole.objects.get_or_create(
             user=member,
-            granted_by=request.user,
-            **serializer.validated_data,
+            module=validated["module"],
+            role_code=validated["role_code"],
+            branch_name=validated["branch_name"],
+            defaults={
+                "granted_by": request.user,
+                "is_active": True,
+                "expires_at": validated.get("expires_at"),
+            },
         )
+        if not created:
+            updates = []
+            if not role.is_active:
+                role.is_active = True
+                updates.append("is_active")
+            if role.granted_by_id != request.user.id:
+                role.granted_by = request.user
+                updates.append("granted_by")
+            if role.expires_at != validated.get("expires_at"):
+                role.expires_at = validated.get("expires_at")
+                updates.append("expires_at")
+            if updates:
+                role.save(update_fields=updates)
         log_action(request, "assign_module_role", model_name="UserModuleRole",
                    object_id=role.pk,
                    detail=f"Assigned {role.module}:{role.role_code} to {member.mobile_number}")
-        return Response(UserModuleRoleSerializer(role).data, status=status.HTTP_201_CREATED)
+        status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        return Response(UserModuleRoleSerializer(role).data, status=status_code)
 
 
 class UserModuleRoleDetailView(APIView):
@@ -766,9 +802,12 @@ class ModuleTeamRoleView(APIView):
             return Response([], status=status.HTTP_200_OK)
 
         roles = UserModuleRole.objects.filter(
-            module=module,
             user__in=tenant_users,
+        ).filter(
+            module=module,
             is_active=True,
+        ).filter(
+            Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
         ).select_related("user", "granted_by")
         payload = [_serialize_module_role_with_user(role) for role in roles]
         return Response(payload, status=status.HTTP_200_OK)
@@ -792,6 +831,7 @@ class ModuleTeamRoleView(APIView):
             "module": module,
             "role_code": request.data.get("role_code"),
             "branch_name": request.data.get("branch_name", ""),
+            "expires_at": request.data.get("expires_at"),
         }
         serializer = UserModuleRoleCreateSerializer(data=payload)
         serializer.is_valid(raise_exception=True)
@@ -802,12 +842,25 @@ class ModuleTeamRoleView(APIView):
             module=module,
             role_code=validated["role_code"],
             branch_name=validated["branch_name"],
-            defaults={"granted_by": request.user, "is_active": True},
+            defaults={
+                "granted_by": request.user,
+                "is_active": True,
+                "expires_at": validated.get("expires_at"),
+            },
         )
-        if not created and not role.is_active:
-            role.is_active = True
-            role.granted_by = request.user
-            role.save(update_fields=["is_active", "granted_by"])
+        if not created:
+            updates = []
+            if not role.is_active:
+                role.is_active = True
+                updates.append("is_active")
+            if role.granted_by_id != request.user.id:
+                role.granted_by = request.user
+                updates.append("granted_by")
+            if role.expires_at != validated.get("expires_at"):
+                role.expires_at = validated.get("expires_at")
+                updates.append("expires_at")
+            if updates:
+                role.save(update_fields=updates)
 
         action = "assign_module_role" if created else "reactivate_module_role"
         log_action(
@@ -854,6 +907,8 @@ class ModuleTeamRoleDetailView(APIView):
             module=module,
             user__in=tenant_users,
             is_active=True,
+        ).filter(
+            Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
         ).first()
         if not role:
             return Response(NOT_FOUND, status=status.HTTP_404_NOT_FOUND)

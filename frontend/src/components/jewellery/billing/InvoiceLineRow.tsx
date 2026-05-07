@@ -1,15 +1,20 @@
 "use client";
 
+import { memo } from "react";
+import { IconButton } from "@/components/ui/IconButton";
+import { TrashIcon } from "@/components/ui/icons";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import { WeightInput } from "@/components/jewellery/shared/WeightInput";
-import { Button } from "@/components/ui/Button";
+import { ItemSearchSelect } from "@/components/jewellery/billing/ItemSearchSelect";
+import { MAKING_MODE_OPTIONS } from "@/constants/jewellery";
 import { formatINRCurrency } from "@/utils/jewellery/formulas";
-import type { JwlItem, JwlInvoiceLine, MakingMode } from "@/store/jewellery-api";
+import type { JwlItem, JwlInvoiceLine, MakingMode, InvoiceType } from "@/store/jewellery-api";
 
 export interface InvoiceLineDraft {
   item: string;
+  huid: string;
   description: string;
   hsn_code: string;
   metal_code: string;
@@ -29,9 +34,10 @@ export interface InvoiceLineDraft {
 interface InvoiceLineRowProps {
   index: number;
   line: InvoiceLineDraft;
-  items: JwlItem[];
+  invoiceType?: InvoiceType;
   computedLine?: JwlInvoiceLine;
   onChange: (index: number, patch: Partial<InvoiceLineDraft>) => void;
+  onItemSelect: (index: number, itemId: string, item?: JwlItem) => void;
   onRemove: (index: number) => void;
   disableRemove?: boolean;
   collapsible?: boolean;
@@ -39,12 +45,13 @@ interface InvoiceLineRowProps {
   onToggleExpand?: (index: number) => void;
 }
 
-export function InvoiceLineRow({
+function InvoiceLineRowBase({
   index,
   line,
-  items,
+  invoiceType,
   computedLine,
   onChange,
+  onItemSelect,
   onRemove,
   disableRemove = false,
   collapsible = false,
@@ -86,33 +93,24 @@ export function InvoiceLineRow({
             {formatINRCurrency(computedLine?.line_total)}
           </p>
         </div>
-        <Button
-          type="button"
-          size="sm"
-          className="min-h-11"
-          variant="secondary"
+        <IconButton
+          variant="danger"
+          label="Remove line"
           onClick={() => onRemove(index)}
           disabled={disableRemove}
         >
-          Remove
-        </Button>
+          <TrashIcon />
+        </IconButton>
       </div>
 
       {collapsible && !expanded ? null : (
         <>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <Select
-          label="Inventory item"
+        <ItemSearchSelect
           value={line.item}
-          onChange={(event) => onChange(index, { item: event.target.value })}
-        >
-          <option value="">Manual line</option>
-          {items.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.sku} - {item.design_name}
-            </option>
-          ))}
-        </Select>
+          onChange={(itemId, item) => onItemSelect(index, itemId, item)}
+          invoiceType={invoiceType}
+        />
 
         <Textarea
           label="Description"
@@ -123,12 +121,22 @@ export function InvoiceLineRow({
           rows={2}
         />
 
-        <Input
-          label="HSN Code"
-          value={line.hsn_code}
-          onChange={(event) => onChange(index, { hsn_code: event.target.value })}
-          placeholder="7113"
-        />
+        <div className="space-y-2">
+          <Input
+            label="HSN Code"
+            value={line.hsn_code}
+            onChange={(event) => onChange(index, { hsn_code: event.target.value })}
+            placeholder="7113"
+          />
+          {line.huid ? (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-muted">HUID:</span>
+              <span className="text-[11px] font-mono font-semibold text-text px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800">
+                {line.huid}
+              </span>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
@@ -175,9 +183,9 @@ export function InvoiceLineRow({
           value={line.making_mode}
           onChange={(event) => onChange(index, { making_mode: event.target.value as MakingMode })}
         >
-          <option value="PER_GRAM">Per gram</option>
-          <option value="PCT_METAL">% of metal</option>
-          <option value="PER_PIECE">Per piece</option>
+          {MAKING_MODE_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
         </Select>
         <Input
           label="Making rate"
@@ -252,3 +260,5 @@ export function InvoiceLineRow({
     </div>
   );
 }
+
+export const InvoiceLineRow = memo(InvoiceLineRowBase);

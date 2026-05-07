@@ -87,6 +87,11 @@ class SalesInvoice(JewelleryBaseModel):
     paid_amount = models.DecimalField(max_digits=18, decimal_places=2, default=0)
     balance_amount = models.DecimalField(max_digits=18, decimal_places=2, default=0)
 
+    # E-invoice metadata (IRN/QR)
+    e_invoice_irn = models.CharField(max_length=200, blank=True, default="")
+    e_invoice_qr = models.TextField(blank=True, default="")
+    e_invoice_is_simulated = models.BooleanField(default=True)
+
     # Audit
     issued_at = models.DateTimeField(null=True, blank=True)
     issued_by = models.ForeignKey(
@@ -135,6 +140,7 @@ class SalesInvoiceLine(models.Model):
         related_name="invoice_lines",
     )
     description = models.CharField(max_length=300, blank=True, default="")
+    huid = models.CharField(max_length=6, blank=True, default="")
     hsn_code = models.CharField(max_length=10, blank=True, default="")
 
     # Metal & weight (persisted at bill time)

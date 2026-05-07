@@ -15,11 +15,22 @@ class Item(JewelleryBaseModel):
         ("TRANSIT", "Inter-branch Transit"),
         ("WRITTEN_OFF", "Written Off"),
     ]
+    HALLMARK_STATUS = [
+        ("NOT_HALLMARKED", "Not Hallmarked"),
+        ("HALLMARKED", "Hallmarked"),
+        ("HUID_ASSIGNED", "HUID Assigned"),
+    ]
 
     design = models.ForeignKey(Design, on_delete=models.PROTECT, related_name="items")
     sku = models.CharField(max_length=100, blank=True, default="")
     barcode = models.CharField(max_length=200, blank=True, default="", db_index=True)
     huid = models.CharField(max_length=20, blank=True, default="", db_index=True)
+    hallmark_status = models.CharField(
+        max_length=20,
+        choices=HALLMARK_STATUS,
+        default="NOT_HALLMARKED",
+        db_index=True,
+    )
     metal = models.ForeignKey(Metal, on_delete=models.PROTECT, related_name="items")
     purity = models.ForeignKey(Purity, on_delete=models.PROTECT, related_name="items")
     gross_wt = models.DecimalField(max_digits=12, decimal_places=4)
@@ -39,6 +50,13 @@ class Item(JewelleryBaseModel):
             models.Index(fields=["barcode"]),
             models.Index(fields=["huid"]),
             models.Index(fields=["sku"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "huid"],
+                condition=models.Q(huid__gt="", deleted_at__isnull=True),
+                name="uniq_jwl_item_tenant_huid_nonempty",
+            )
         ]
         ordering = ["-created_at"]
 

@@ -21,6 +21,7 @@ from apps.notifications.views import (
 )
 from apps.common.permissions import IsAuthenticatedNonBorrowerWrite
 from apps.users.views import (
+    ChangePasswordView,
     CookieTokenRefreshView,
     LoginView,
     LogoutView,
@@ -32,6 +33,7 @@ from apps.users.views import (
     ModuleSelfActivateView,
     ModuleTeamRoleDetailView,
     ModuleTeamRoleView,
+    ResetPasswordRequiredView,
     SignupView,
     TeamMemberDetailView,
     TeamView,
@@ -75,6 +77,8 @@ urlpatterns = [
     path("api/auth/logout/", LogoutView.as_view(), name="logout"),
     path("api/auth/token/refresh/", CookieTokenRefreshView.as_view(), name="token-refresh"),
     path("api/auth/me/", MeView.as_view(), name="me"),
+    path("api/auth/change-password/", ChangePasswordView.as_view(), name="change-password"),
+    path("api/auth/reset-password-required/", ResetPasswordRequiredView.as_view(), name="reset-password-required"),
     path("api/onboarding/profile/", BusinessProfileView.as_view(), name="onboarding-profile"),
     path("api/dashboard/summary/", DashboardSummaryView.as_view(), name="dashboard-summary"),
     path("api/loans/overdue/", OverdueLoanListView.as_view(), name="overdue-loans"),
@@ -87,6 +91,8 @@ urlpatterns = [
     path("api/users/team/<int:pk>/toggle-status/", ToggleTeamMemberStatusView.as_view(), name="team-member-toggle"),
     path("api/users/team/<int:pk>/module-roles/", UserModuleRoleView.as_view(), name="team-member-module-roles"),
     path("api/users/team/<int:pk>/module-roles/<int:role_id>/", UserModuleRoleDetailView.as_view(), name="team-member-module-role-detail"),
+    path("api/users/<int:pk>/module-roles/", UserModuleRoleView.as_view(), name="user-module-roles"),
+    path("api/users/<int:pk>/module-roles/<int:role_id>/", UserModuleRoleDetailView.as_view(), name="user-module-role-detail"),
     path("api/users/modules/activate/", ModuleSelfActivateView.as_view(), name="user-module-self-activate"),
     path("api/users/modules/request-access/", ModuleRequestAccessView.as_view(), name="user-module-request-access"),
     path("api/users/modules/<str:module>/team-roles/", ModuleTeamRoleView.as_view(), name="module-team-roles"),

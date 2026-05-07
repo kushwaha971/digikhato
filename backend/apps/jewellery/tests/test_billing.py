@@ -6,8 +6,9 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from apps.common.constants import JwlRoleCode, ModuleCode
 from apps.jewellery.models.billing import Customer, OldGoldPurchase, SalesInvoice, SalesInvoiceLine
-from apps.jewellery.models.master import Metal, NumberSeries, Purity
+from apps.jewellery.models.master import Category, Design, Metal, NumberSeries, Purity
 from apps.jewellery.services.billing import (
     calc_making_charge,
     calc_old_gold_deduction,
@@ -17,9 +18,9 @@ from apps.jewellery.services.billing import (
     create_invoice,
     issue_invoice,
 )
-from apps.jewellery.models.inventory import Item, Design, Category
+from apps.jewellery.models.inventory import Item
 from apps.onboarding.models import BusinessProfile
-from apps.users.models import User
+from apps.users.models import User, UserModuleRole
 
 
 def _make_tenant(mobile, name):
@@ -33,6 +34,14 @@ def _make_tenant(mobile, name):
         owner=user,
         business_name=name,
         feature_flags={"jewellery": True},
+    )
+    UserModuleRole.objects.create(
+        user=user,
+        module=ModuleCode.JEWELLERY,
+        role_code=JwlRoleCode.ADMIN,
+        branch_name="",
+        granted_by=user,
+        is_active=True,
     )
     return user
 
@@ -372,3 +381,179 @@ class BillingApiTests(APITestCase):
         self.assertEqual(pdf_resp.status_code, status.HTTP_200_OK)
         self.assertEqual(pdf_resp["Content-Type"], "application/pdf")
         self.assertTrue(bytes(pdf_resp.content).startswith(b"%PDF-1.4"))
+
+    def test_send_invoice_endpoint(self):
+        create_url = reverse("jewellery:sales-invoice-list")
+        create_resp = self.client.post(create_url, {
+            "customer": str(self.customer.id),
+            "invoice_type": "TAX_INVOICE",
+            "lines": [{
+                "item": str(self.item.id),
+                "description": "Gold Ring",
+                "net_wt": "10",
+                "rate_per_gram": "6373",
+                "making_mode": "PER_GRAM",
+                "making_rate": "150",
+                "wastage_pct": "0",
+                "hallmarking_fee": "45",
+                "stone_value": "0",
+                "gst_rate_pct": "3",
+            }],
+            "discount_amount": "0",
+        }, format="json")
+        invoice_id = create_resp.data["id"]
+
+        issue_url = reverse("jewellery:sales-invoice-issue", kwargs={"pk": invoice_id})
+        issue_resp = self.client.post(issue_url, {}, format="json")
+        self.assertEqual(issue_resp.status_code, status.HTTP_200_OK)
+
+        send_url = reverse("jewellery:sales-invoice-send", kwargs={"pk": invoice_id})
+        send_resp = self.client.post(send_url, {"channel": "WA", "to": "919999999999"}, format="json")
+        self.assertEqual(send_resp.status_code, status.HTTP_200_OK)
+        self.assertIn("share_url", send_resp.data)
+
+    def test_einvoice_generation_endpoint(self):
+        create_url = reverse("jewellery:sales-invoice-list")
+        create_resp = self.client.post(create_url, {
+            "customer": str(self.customer.id),
+            "invoice_type": "TAX_INVOICE",
+            "lines": [{
+                "item": str(self.item.id),
+                "description": "Gold Ring",
+                "net_wt": "10",
+                "rate_per_gram": "6373",
+                "making_mode": "PER_GRAM",
+                "making_rate": "150",
+                "wastage_pct": "0",
+                "hallmarking_fee": "45",
+                "stone_value": "0",
+                "gst_rate_pct": "3",
+            }],
+            "discount_amount": "0",
+        }, format="json")
+        invoice_id = create_resp.data["id"]
+
+        issue_url = reverse("jewellery:sales-invoice-issue", kwargs={"pk": invoice_id})
+        issue_resp = self.client.post(issue_url, {}, format="json")
+        self.assertEqual(issue_resp.status_code, status.HTTP_200_OK)
+
+        einvoice_url = reverse("jewellery:sales-invoice-e-invoice", kwargs={"pk": invoice_id})
+        einvoice_resp = self.client.post(einvoice_url, {}, format="json")
+        self.assertEqual(einvoice_resp.status_code, status.HTTP_200_OK)
+        self.assertTrue(einvoice_resp.data["e_invoice_irn"])
+
+
+    def test_invoice_list_ordering_by_voucher_date(self):
+        """Ordering param controls sort direction."""
+        import datetime
+        inv1 = SalesInvoice.objects.create(
+            tenant=self.tenant,
+            invoice_type="TAX_INVOICE",
+            voucher_date=datetime.date(2026, 1, 1),
+        )
+        inv2 = SalesInvoice.objects.create(
+            tenant=self.tenant,
+            invoice_type="TAX_INVOICE",
+            voucher_date=datetime.date(2026, 6, 1),
+        )
+        # ascending
+        res = self.client.get("/api/jwl/v1/sales/invoices/?ordering=voucher_date")
+        self.assertEqual(res.status_code, 200)
+        ids = [r["id"] for r in res.data["results"]]
+        self.assertLess(ids.index(str(inv1.id)), ids.index(str(inv2.id)))
+        # descending (default)
+        res2 = self.client.get("/api/jwl/v1/sales/invoices/?ordering=-voucher_date")
+        self.assertEqual(res2.status_code, 200)
+        ids2 = [r["id"] for r in res2.data["results"]]
+        self.assertLess(ids2.index(str(inv2.id)), ids2.index(str(inv1.id)))
+
+
+class BillingPermissionTests(APITestCase):
+    def setUp(self):
+        self.tenant = _make_tenant("9555500041", "Billing Permission Tenant")
+        self.metal, self.purity, self.item = _make_master(self.tenant)
+        self.customer = Customer.objects.create(
+            tenant=self.tenant,
+            branch_name="",
+            created_by=self.tenant,
+            updated_by=self.tenant,
+            name="Permission Customer",
+            mobile="9000000011",
+        )
+
+    def _create_and_issue_invoice(self) -> str:
+        self.client.force_authenticate(user=self.tenant)
+        create_url = reverse("jewellery:sales-invoice-list")
+        create_resp = self.client.post(
+            create_url,
+            {
+                "customer": str(self.customer.id),
+                "invoice_type": "TAX_INVOICE",
+                "lines": [{
+                    "item": str(self.item.id),
+                    "description": "Gold Ring",
+                    "net_wt": "10",
+                    "rate_per_gram": "6373",
+                    "making_mode": "PER_GRAM",
+                    "making_rate": "150",
+                    "wastage_pct": "0",
+                    "hallmarking_fee": "45",
+                    "stone_value": "0",
+                    "gst_rate_pct": "3",
+                }],
+                "discount_amount": "0",
+            },
+            format="json",
+        )
+        self.assertEqual(create_resp.status_code, status.HTTP_201_CREATED)
+        invoice_id = create_resp.data["id"]
+
+        issue_url = reverse("jewellery:sales-invoice-issue", kwargs={"pk": invoice_id})
+        issue_resp = self.client.post(issue_url, {}, format="json")
+        self.assertEqual(issue_resp.status_code, status.HTTP_200_OK)
+        return invoice_id
+
+    def _make_module_user(self, *, mobile: str, name: str, role_code: str) -> User:
+        user = User.objects.create_user(
+            mobile_number=mobile,
+            password="Test@1234",
+            full_name=name,
+            role="collector",
+            tenant=self.tenant,
+            branch_name="",
+        )
+        UserModuleRole.objects.create(
+            user=user,
+            module=ModuleCode.JEWELLERY,
+            role_code=role_code,
+            branch_name="",
+            granted_by=self.tenant,
+            is_active=True,
+        )
+        return user
+
+    def test_cashier_cannot_cancel_invoice(self):
+        invoice_id = self._create_and_issue_invoice()
+        cashier = self._make_module_user(
+            mobile="9555500042",
+            name="Cashier User",
+            role_code=JwlRoleCode.CASHIER,
+        )
+        self.client.force_authenticate(user=cashier)
+
+        cancel_url = reverse("jewellery:sales-invoice-cancel", kwargs={"pk": invoice_id})
+        resp = self.client.post(cancel_url, {"reason": "Wrong billing"}, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_manager_can_cancel_invoice(self):
+        invoice_id = self._create_and_issue_invoice()
+        manager = self._make_module_user(
+            mobile="9555500043",
+            name="Manager User",
+            role_code=JwlRoleCode.MANAGER,
+        )
+        self.client.force_authenticate(user=manager)
+
+        cancel_url = reverse("jewellery:sales-invoice-cancel", kwargs={"pk": invoice_id})
+        resp = self.client.post(cancel_url, {"reason": "Customer returned"}, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)

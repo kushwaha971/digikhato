@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Optional
 
 from django.utils import timezone
 
@@ -70,7 +71,9 @@ def sync_due_alert_notifications_for_user(*, user) -> int:
     return synced_loans
 
 
-def _build_due_alert_message(loan: Loan, *, days_to_due: int | None, due_date: date | None, role: str, is_overdue: bool) -> str:
+def _build_due_alert_message(
+    loan: Loan, *, days_to_due: Optional[int], due_date: Optional[date], role: str, is_overdue: bool
+) -> str:
     borrower_name = loan.borrower.name
     if role == RoleChoices.BORROWER:
         if is_overdue:
@@ -100,7 +103,7 @@ def _build_due_alert_message(loan: Loan, *, days_to_due: int | None, due_date: d
     return f"Overall update: {borrower_name} due in {days_to_due} day(s) on {due_date}."
 
 
-def _notification_type_for_role(*, role: str, is_overdue: bool, days_to_due: int | None) -> str:
+def _notification_type_for_role(*, role: str, is_overdue: bool, days_to_due: Optional[int]) -> str:
     if role == RoleChoices.BORROWER:
         if is_overdue:
             return NotificationType.OVERDUE_ALERT
@@ -131,7 +134,7 @@ def _redirect_target_for_role(*, role: str, loan: Loan) -> str:
     return "/borrowers"
 
 
-def sync_due_alert_notifications_for_loan(loan: Loan, *, today: date | None = None) -> None:
+def sync_due_alert_notifications_for_loan(loan: Loan, *, today: Optional[date] = None) -> None:
     current_date = today or timezone.localdate()
     alert_state = getLoanAlertStatus(loan, today=current_date)
 

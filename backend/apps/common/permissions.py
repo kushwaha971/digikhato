@@ -1,4 +1,5 @@
 from rest_framework.permissions import SAFE_METHODS, BasePermission
+from django.utils import timezone
 
 from apps.common.constants import JWL_ROLE_PERMISSIONS
 
@@ -63,6 +64,8 @@ class HasModulePermission(BasePermission):
         ).filter(
             # Match explicit branch assignment OR tenant-wide (blank branch)
             Q(branch_name=branch) | Q(branch_name="")
+        ).filter(
+            Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
         )
 
         for role in roles:

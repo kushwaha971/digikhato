@@ -6,11 +6,12 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from apps.common.constants import JwlRoleCode, ModuleCode
 from apps.jewellery.models.inventory import Item, StockMovement
 from apps.jewellery.models.master import Category, Design, Metal, Purity
 from apps.jewellery.services.inventory import scan_item, write_off_item
 from apps.onboarding.models import BusinessProfile
-from apps.users.models import User
+from apps.users.models import User, UserModuleRole
 
 
 def _make_tenant(mobile, name):
@@ -24,6 +25,14 @@ def _make_tenant(mobile, name):
         owner=user,
         business_name=name,
         feature_flags={"jewellery": True},
+    )
+    UserModuleRole.objects.create(
+        user=user,
+        module=ModuleCode.JEWELLERY,
+        role_code=JwlRoleCode.ADMIN,
+        branch_name="",
+        granted_by=user,
+        is_active=True,
     )
     return user
 

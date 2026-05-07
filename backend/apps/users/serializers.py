@@ -1,3 +1,5 @@
+from django.db.models import Q
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
@@ -64,7 +66,17 @@ class UserModuleRoleSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = UserModuleRole
-        fields = ["id", "module", "role_code", "branch_name", "is_active", "jwl_permissions", "features", "granted_by"]
+        fields = [
+            "id",
+            "module",
+            "role_code",
+            "branch_name",
+            "is_active",
+            "expires_at",
+            "jwl_permissions",
+            "features",
+            "granted_by",
+        ]
         read_only_fields = ["id", "granted_by", "jwl_permissions", "features"]
 
     def get_jwl_permissions(self, obj):
@@ -79,7 +91,7 @@ class UserModuleRoleSerializer(serializers.ModelSerializer):
 class UserModuleRoleCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserModuleRole
-        fields = ["module", "role_code", "branch_name"]
+        fields = ["module", "role_code", "branch_name", "expires_at"]
 
     def validate_module(self, value):
         if value not in ModuleCode.values:
@@ -89,6 +101,11 @@ class UserModuleRoleCreateSerializer(serializers.ModelSerializer):
     def validate_role_code(self, value):
         if value not in JwlRoleCode.values:
             raise serializers.ValidationError(f"Invalid role. Choices: {JwlRoleCode.values}")
+        return value
+
+    def validate_expires_at(self, value):
+        if value and value <= timezone.now():
+            raise serializers.ValidationError("expires_at must be in the future.")
         return value
 
 
@@ -139,7 +156,12 @@ class UserSerializer(serializers.ModelSerializer):
         if cached is not None:
             return cached
 
-        roles = UserModuleRole.objects.filter(user=obj, is_active=True).select_related()
+        roles = UserModuleRole.objects.filter(
+            user=obj,
+            is_active=True,
+        ).filter(
+            Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
+        ).select_related()
         serialized = UserModuleRoleSerializer(roles, many=True).data
 
         # Inject a synthetic loans module role derived from the user's system role.

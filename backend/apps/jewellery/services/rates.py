@@ -26,7 +26,7 @@ def calculate_gold_rate(
         sell_rate = (mcx_per_10g / 10) × (purity_pct / 99.9) × (1 + markup_pct / 100)
 
     Example:
-        mcx_rate_per_10g=68500, purity_pct=91.6, markup_pct=1.5 → ₹6,373.00/g
+        mcx_rate_per_10g=68500, purity_pct=91.6, markup_pct=1.5 → ₹6,375.09/g
     """
     pure_per_gram = Decimal(mcx_rate_per_10g) / Decimal("10")
     purity_factor = Decimal(purity_pct) / Decimal("99.9")

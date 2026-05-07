@@ -1,5 +1,7 @@
 """Jewellery inventory serializers (Phase B-1.3)."""
 
+import re
+
 from rest_framework import serializers
 
 from apps.jewellery.models.inventory import (
@@ -41,6 +43,7 @@ class ItemListSerializer(serializers.ModelSerializer):
             "sku",
             "barcode",
             "huid",
+            "hallmark_status",
             "design",
             "design_name",
             "category_name",
@@ -50,6 +53,8 @@ class ItemListSerializer(serializers.ModelSerializer):
             "purity_code",
             "gross_wt",
             "net_wt",
+            "stone_wt",
+            "charge_wt",
             "status",
             "location_bin",
             "branch_name",
@@ -72,6 +77,7 @@ class ItemDetailSerializer(serializers.ModelSerializer):
             "sku",
             "barcode",
             "huid",
+            "hallmark_status",
             "design",
             "design_name",
             "metal",
@@ -108,6 +114,7 @@ class ItemWriteSerializer(serializers.ModelSerializer):
             "sku",
             "barcode",
             "huid",
+            "hallmark_status",
             "design",
             "metal",
             "purity",
@@ -124,6 +131,14 @@ class ItemWriteSerializer(serializers.ModelSerializer):
             "stones",
         ]
         read_only_fields = ["id"]
+
+    def validate_huid(self, value):
+        huid = (value or "").strip().upper()
+        if not huid:
+            return ""
+        if not re.fullmatch(r"[A-Z0-9]{6}", huid):
+            raise serializers.ValidationError("HUID must be 6 uppercase alphanumeric characters.")
+        return huid
 
     def create(self, validated_data):
         diamonds_data = validated_data.pop("diamonds", [])

@@ -6,8 +6,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import viewsets
 
+from apps.common.constants import P_RATES_OVERRIDE, P_RATES_VIEW
 from apps.jewellery.models.rates import RateHistory, TenantRate
-from apps.jewellery.permissions import JewelleryFeatureGuard
+from apps.jewellery.permissions import HasJewelleryPermission, JewelleryFeatureGuard
 from apps.jewellery.serializers.rates import (
     LiveRateSerializer,
     RateHistorySerializer,
@@ -21,7 +22,7 @@ from apps.users.views import get_effective_tenant
 class LiveRatesView(APIView):
     """GET /api/jwl/v1/rates/live/ — current rate per metal/purity."""
 
-    permission_classes = [IsAuthenticated, JewelleryFeatureGuard]
+    permission_classes = [IsAuthenticated, JewelleryFeatureGuard, HasJewelleryPermission(P_RATES_VIEW)]
 
     def get(self, request):
         tenant = get_effective_tenant(request.user)
@@ -33,7 +34,7 @@ class LiveRatesView(APIView):
 class RateHistoryViewSet(viewsets.ReadOnlyModelViewSet):
     """GET /api/jwl/v1/rates/history/ — filterable rate history."""
 
-    permission_classes = [IsAuthenticated, JewelleryFeatureGuard]
+    permission_classes = [IsAuthenticated, JewelleryFeatureGuard, HasJewelleryPermission(P_RATES_VIEW)]
     serializer_class = RateHistorySerializer
     queryset = RateHistory.objects.select_related("metal", "purity")
 
@@ -54,7 +55,7 @@ class RateHistoryViewSet(viewsets.ReadOnlyModelViewSet):
 class RateOverrideView(APIView):
     """POST /api/jwl/v1/rates/override/ — set tenant rate override (Admin only)."""
 
-    permission_classes = [IsAuthenticated, JewelleryFeatureGuard]
+    permission_classes = [IsAuthenticated, JewelleryFeatureGuard, HasJewelleryPermission(P_RATES_OVERRIDE)]
 
     def post(self, request):
         serializer = RateOverrideSerializer(data=request.data)

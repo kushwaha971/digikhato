@@ -4,11 +4,13 @@ import { setupListeners } from "@reduxjs/toolkit/query";
 import { api } from "./api";
 import authReducer from "./auth-slice";
 import snackbarReducer from "./snackbar-slice";
+import jewelleryFiltersReducer from "./jewellery-filters-slice";
 
 export const store = configureStore({
   reducer: {
     auth: authReducer,
     snackbar: snackbarReducer,
+    jewelleryFilters: jewelleryFiltersReducer,
     [api.reducerPath]: api.reducer,
   },
   middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(api.middleware),
