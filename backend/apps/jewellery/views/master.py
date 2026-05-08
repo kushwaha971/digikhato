@@ -1,3 +1,5 @@
+import uuid
+
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -80,9 +82,14 @@ class PurityViewSet(viewsets.ReadOnlyModelViewSet):
             return Purity.objects.none()
 
         qs = super().get_queryset().filter(tenant=tenant, deleted_at__isnull=True)
-        metal_code = self.request.query_params.get("metal")
-        if metal_code:
-            qs = qs.filter(metal__code__iexact=metal_code)
+        metal_param = self.request.query_params.get("metal")
+        if metal_param:
+            try:
+                metal_uuid = uuid.UUID(str(metal_param))
+            except (TypeError, ValueError, AttributeError):
+                qs = qs.filter(metal__code__iexact=metal_param)
+            else:
+                qs = qs.filter(metal_id=metal_uuid)
         return qs
 
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Suspense, useCallback, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 
 import { StickyGlobalSearchBar } from "@/components/business/StickyGlobalSearchBar";
 import { HUIDTrackingView } from "@/components/jewellery/inventory/HUIDTrackingView";
@@ -11,6 +11,7 @@ import { ModulePlaceholder } from "@/components/jewellery/shared/ModulePlacehold
 import { StatusBadge } from "@/components/jewellery/shared/StatusBadge";
 import { Screen } from "@/components/layout/Screen";
 import { Button } from "@/components/ui/Button";
+import { Drawer } from "@/components/ui/Drawer";
 import { PlusIcon } from "@/components/ui/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ResponsiveFilterPanel, FilterSelect } from "@/components/ui/ResponsiveFilterPanel";
@@ -54,7 +55,7 @@ function ItemCard({ item }: { item: JwlItem }) {
       <div className="app-panel p-4 card-clickable">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="font-semibold text-text truncate">{item.sku || item.barcode || item.id.slice(0, 8)}</p>
+            <p className="font-semibold text-text truncate">{item.sku || item.barcode || "Unlabeled item"}</p>
             <p className="text-xs text-muted mt-0.5 truncate">{item.design_name}</p>
           </div>
           <StatusBadge status={item.status} />
@@ -78,12 +79,12 @@ function ItemCard({ item }: { item: JwlItem }) {
 }
 
 function ItemMasterPage() {
-  const router = useRouter();
   const dispatch = useAppDispatch();
   const filters = useAppSelector((state) => state.jewelleryFilters.inventory);
   const { search, status, page } = filters;
 
   const [draftStatus, setDraftStatus] = useState(status);
+  const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
 
   const debouncedSearch = useDebounce(search, 300);
 
@@ -126,9 +127,9 @@ function ItemMasterPage() {
             </FilterSelect>
           </ResponsiveFilterPanel>
 
-          <Link href="/jewellery/inventory/new">
-            <Button variant="success" size="sm" leftIcon={<PlusIcon />}>Add item</Button>
-          </Link>
+          <Button variant="success" size="sm" leftIcon={<PlusIcon />} onClick={() => setCreateDrawerOpen(true)}>
+            Add item
+          </Button>
         </div>
       )}
     >
@@ -151,7 +152,7 @@ function ItemMasterPage() {
         <EmptyState
           title="No inventory items"
           description={hasFilters ? "No records match your current filters." : "Add your first jewellery item to begin tracking stock."}
-          action={{ label: "Add item", onClick: () => router.push("/jewellery/inventory/new") }}
+          action={{ label: "Add item", onClick: () => setCreateDrawerOpen(true) }}
         />
       ) : null}
 
@@ -171,6 +172,19 @@ function ItemMasterPage() {
           ) : null}
         </>
       ) : null}
+
+      <Drawer
+        open={createDrawerOpen}
+        onClose={() => setCreateDrawerOpen(false)}
+        title="Add item"
+        size="2xl"
+      >
+        <iframe
+          src="/jewellery/inventory/new"
+          className="w-full h-[80vh] rounded-xl border border-border"
+          title="Add inventory item form"
+        />
+      </Drawer>
     </Screen>
   );
 }

@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use } from "react";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 
 import { Screen } from "@/components/layout/Screen";
 import { Badge } from "@/components/ui/Badge";
@@ -24,8 +23,9 @@ function InfoRow({ label, value }: Readonly<{ label: string; value?: string | nu
   );
 }
 
-export default function CustomerDetailPage({ params }: Readonly<{ params: Promise<{ id: string }> }>) {
-  const { id } = use(params);
+export default function CustomerDetailPage() {
+  const params = useParams<{ id: string }>();
+  const id = params?.id ?? "";
   const router = useRouter();
 
   const { data: customer, isFetching: isFetchingCustomer } = useGetCustomerQuery(id);
@@ -74,7 +74,7 @@ export default function CustomerDetailPage({ params }: Readonly<{ params: Promis
       actions={(
         <Button
           variant="secondary"
-          onClick={() => router.push(`/jewellery/customers/new?edit=${customer.id}`)}
+          onClick={() => router.push(`/jewellery/customers?edit=${customer.id}`)}
         >
           Edit
         </Button>

@@ -89,7 +89,7 @@ function ItemSearchSelectBase({
   }
 
   const displayLabel = selectedItem
-    ? `${selectedItem.sku || selectedItem.id.slice(0, 8)}${selectedItem.design_name ? ` — ${selectedItem.design_name}` : ""}`
+    ? `${selectedItem.sku || selectedItem.barcode || selectedItem.huid || "Selected item"}${selectedItem.design_name ? ` — ${selectedItem.design_name}` : ""}`
     : "Selected item";
 
   return (
@@ -158,7 +158,7 @@ function ItemSearchSelectBase({
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <span className="font-semibold text-text">{item.sku || item.id.slice(0, 8)}</span>
+                  <span className="font-semibold text-text">{item.sku || item.barcode || item.huid || "Item"}</span>
                   {item.design_name ? (
                     <span className="text-muted ml-1.5 truncate">— {item.design_name}</span>
                   ) : null}

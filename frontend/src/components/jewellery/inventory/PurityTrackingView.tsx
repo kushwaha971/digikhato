@@ -97,7 +97,7 @@ export function PurityTrackingView() {
               <Link key={item.id} href={`/jewellery/inventory/${item.id}`} className="block px-4 py-3 hover:bg-surface2 transition-colors">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-text truncate">{item.sku || item.barcode || item.id.slice(0, 8)}</p>
+                    <p className="text-sm font-semibold text-text truncate">{item.sku || item.barcode || "Unlabeled item"}</p>
                     <p className="text-xs text-muted truncate">{item.design_name}</p>
                   </div>
                   <p className="text-xs text-muted whitespace-nowrap">{item.net_wt} g</p>

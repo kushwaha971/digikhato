@@ -39,7 +39,7 @@ export default function JewelleryUsersRolesPage() {
       const member = teamMembers.find((m) => m.id === (role.user?.id ?? -1));
       return {
         ...role,
-        userName: role.user?.full_name ?? member?.full_name ?? `User #${role.user?.id ?? "?"}`,
+        userName: role.user?.full_name ?? member?.full_name ?? "Unknown user",
         userMobile: role.user?.mobile_number ?? member?.mobile_number ?? "",
       };
     });

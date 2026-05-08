@@ -95,11 +95,19 @@ function PledgeItemRow({
   onRemove: () => void;
   canRemove: boolean;
 }>) {
-  const { data: metals } = useListMetalsQuery();
-  const { data: purities } = useListPuritiesQuery(
-    { metal: values.metal || undefined },
-    { skip: !values.metal },
-  );
+  const { data: metalsRes } = useListMetalsQuery();
+  const { data: puritiesRes } = useListPuritiesQuery({});
+  const metals = Array.isArray(metalsRes)
+    ? metalsRes
+    : ((metalsRes as { results?: typeof metalsRes } | undefined)?.results ?? []);
+  const allPurities = Array.isArray(puritiesRes)
+    ? puritiesRes
+    : ((puritiesRes as { results?: typeof puritiesRes } | undefined)?.results ?? []);
+  const selectedMetalCode = metals.find((m) => m.id === values.metal)?.code;
+  const purities = allPurities.filter((p) => (
+    p.metal === values.metal
+    || (selectedMetalCode ? p.metal_code === selectedMetalCode : false)
+  ));
 
   const netWt = Number.parseFloat(values.net_wt) || 0;
   const valuationRate = Number.parseFloat(values.valuation_rate) || 0;
@@ -140,7 +148,7 @@ function PledgeItemRow({
           error={touched.metal ? errors.metal : undefined}
         >
           <option value="">Select metal</option>
-          {(metals ?? []).map((m) => (
+          {metals.map((m) => (
             <option key={m.id} value={m.id}>{m.name}</option>
           ))}
         </Select>
@@ -153,7 +161,7 @@ function PledgeItemRow({
           error={touched.purity ? errors.purity : undefined}
         >
           <option value="">Select purity</option>
-          {(purities ?? []).map((p) => (
+          {purities.map((p) => (
             <option key={p.id} value={p.id}>{p.code} ({p.pct}%)</option>
           ))}
         </Select>

@@ -191,7 +191,7 @@ function TrashSection() {
     try {
       await restoreFromTrash({ entity, id }).unwrap();
     } catch {
-      setErrorMsg(`Failed to restore ${entity} #${id}.`);
+      setErrorMsg("Failed to restore the selected record.");
     } finally {
       setRestoringKey(null);
     }
@@ -226,7 +226,7 @@ function TrashSection() {
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-text truncate">{item.label}</p>
                   <p className="text-xs text-muted">
-                    {item.entity} &middot; ID: {item.id}
+                    {item.entity}
                   </p>
                 </div>
                 <Button

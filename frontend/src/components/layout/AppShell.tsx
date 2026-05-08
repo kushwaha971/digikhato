@@ -18,11 +18,13 @@ interface AppShellProps {
 
 function AppShellInner({ children }: AppShellProps) {
   const pathname = usePathname();
-  const { isAdminOrCollector } = useRoleAccess();
+  const { isAdminOrCollector, isSuperAdmin, isBorrower } = useRoleAccess();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const { collapsed } = useSidebarState();
   const moduleCtx = getModuleContext(pathname);
-  const showGlobalSearch = isAdminOrCollector && moduleCtx === "loans";
+  const showGlobalSearch =
+    (isAdminOrCollector && moduleCtx === "loans") ||
+    (moduleCtx === "jewellery" && !isSuperAdmin && !isBorrower);
   const notificationsEnabled = shouldShowNotifications(pathname);
   const { data: unreadNotifications } = useListNotificationsQuery(
     { active: true, unread: true },
@@ -78,8 +80,8 @@ function AppShellInner({ children }: AppShellProps) {
         {/* Desktop header */}
         {showDesktopHeader ? (
           <header className="hidden lg:flex sticky top-0 z-30 h-16 items-center justify-between px-6 border-b border-border bg-surface shadow-sm">
-            <div className="w-full max-w-md">
-              {showGlobalSearch ? <GlobalSearch /> : null}
+              <div className="w-full max-w-md">
+              {showGlobalSearch ? <GlobalSearch moduleCtx={moduleCtx} /> : null}
             </div>
             {notificationsEnabled ? (
               <Link

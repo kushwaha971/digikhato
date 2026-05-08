@@ -71,7 +71,7 @@ export function HUIDTrackingView() {
           <div className="divide-y divide-border">
             {filtered.map((item) => (
               <div key={item.id} className="grid grid-cols-1 md:grid-cols-12 gap-2 px-4 py-3 text-sm">
-                <p className="md:col-span-2 font-semibold text-text">{item.sku || item.barcode || item.id.slice(0, 8)}</p>
+                <p className="md:col-span-2 font-semibold text-text">{item.sku || item.barcode || "Unlabeled item"}</p>
                 <p className="md:col-span-3 text-muted">{item.design_name || "-"}</p>
                 <div className="md:col-span-2">
                   {item.huid ? (

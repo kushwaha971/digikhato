@@ -140,7 +140,7 @@ class CreateInvoiceSerializer(serializers.Serializer):
     place_of_supply_state_code = serializers.CharField(required=False, default="")
     seller_state_code = serializers.CharField(required=False, default="")
     discount_amount = serializers.DecimalField(max_digits=18, decimal_places=2, default=0)
-    notes = serializers.CharField(required=False, default="")
+    notes = serializers.CharField(required=False, allow_blank=True, default="")
     lines = InvoiceLineWriteSerializer(many=True, min_length=1)
     old_gold = OldGoldWriteSerializer(many=True, required=False, default=list)
     payments = PaymentWriteSerializer(many=True, required=False, default=list)

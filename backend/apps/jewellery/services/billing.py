@@ -21,6 +21,7 @@ from apps.jewellery.models.billing import (
 )
 from apps.jewellery.models.inventory import Item
 from apps.jewellery.services.number_series import get_next_number
+from apps.jewellery.services.outstanding import post_movement
 from apps.notifications.models import Notification, NotificationType
 
 TWO = Decimal("0.01")
@@ -356,6 +357,34 @@ def issue_invoice(invoice: SalesInvoice, issued_by: Any) -> SalesInvoice:
                     raise ValueError(f"Items not in sold state: {codes}. Cannot issue credit note.")
                 sold_items.update(status="IN_STOCK")
 
+        if invoice.customer_id:
+            balance_delta = Decimal(str(invoice.balance_amount or 0))
+            if balance_delta != 0:
+                if invoice.invoice_type == "CREDIT_NOTE":
+                    post_movement(
+                        tenant=invoice.tenant,
+                        customer=invoice.customer,
+                        movement_type="INVOICE_CREDIT",
+                        amount_delta=-balance_delta,
+                        reference_type="SALES_INVOICE",
+                        reference_id=str(invoice.id),
+                        notes="Issued credit note",
+                        txn_date=timezone.localdate(invoice.issued_at) if invoice.issued_at else timezone.localdate(),
+                        created_by=issued_by,
+                    )
+                elif invoice.invoice_type in ("TAX_INVOICE", "CASH_MEMO", "NON_GST"):
+                    post_movement(
+                        tenant=invoice.tenant,
+                        customer=invoice.customer,
+                        movement_type="INVOICE_DEBIT",
+                        amount_delta=balance_delta,
+                        reference_type="SALES_INVOICE",
+                        reference_id=str(invoice.id),
+                        notes="Issued sales invoice",
+                        txn_date=timezone.localdate(invoice.issued_at) if invoice.issued_at else timezone.localdate(),
+                        created_by=issued_by,
+                    )
+
     return invoice
 
 
@@ -389,6 +418,34 @@ def cancel_invoice(invoice: SalesInvoice, cancelled_by: Any, reason: str) -> Sal
                 Item.objects.filter(id__in=item_ids, status="IN_STOCK").update(status="SOLD")
             elif invoice.invoice_type in ("TAX_INVOICE", "CASH_MEMO", "NON_GST"):
                 Item.objects.filter(id__in=item_ids, status="SOLD").update(status="IN_STOCK")
+
+        if invoice.customer_id:
+            balance_delta = Decimal(str(invoice.balance_amount or 0))
+            if balance_delta != 0:
+                if invoice.invoice_type == "CREDIT_NOTE":
+                    post_movement(
+                        tenant=invoice.tenant,
+                        customer=invoice.customer,
+                        movement_type="INVOICE_DEBIT",
+                        amount_delta=balance_delta,
+                        reference_type="SALES_INVOICE_CANCEL",
+                        reference_id=str(invoice.id),
+                        notes=f"Cancel credit note: {reason}",
+                        txn_date=timezone.localdate(invoice.cancelled_at) if invoice.cancelled_at else timezone.localdate(),
+                        created_by=cancelled_by,
+                    )
+                elif invoice.invoice_type in ("TAX_INVOICE", "CASH_MEMO", "NON_GST"):
+                    post_movement(
+                        tenant=invoice.tenant,
+                        customer=invoice.customer,
+                        movement_type="INVOICE_CREDIT",
+                        amount_delta=-balance_delta,
+                        reference_type="SALES_INVOICE_CANCEL",
+                        reference_id=str(invoice.id),
+                        notes=f"Cancel invoice: {reason}",
+                        txn_date=timezone.localdate(invoice.cancelled_at) if invoice.cancelled_at else timezone.localdate(),
+                        created_by=cancelled_by,
+                    )
 
     return invoice
 

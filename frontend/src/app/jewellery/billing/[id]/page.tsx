@@ -78,7 +78,7 @@ export default function InvoiceDetailPage() {
     const objectUrl = window.URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = objectUrl;
-    anchor.download = `${invoice.voucher_no || invoice.id}.pdf`;
+    anchor.download = `${invoice.voucher_no || "invoice-draft"}.pdf`;
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();

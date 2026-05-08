@@ -77,7 +77,7 @@ export default function ItemDetailPage() {
 
   return (
     <Screen
-      title={item.sku || item.barcode || item.id.slice(0, 8)}
+      title={item.sku || item.barcode || "Inventory Item"}
       subtitle={item.design_name || "Item detail"}
       backHref="/jewellery/inventory"
       actions={
@@ -308,7 +308,7 @@ export default function ItemDetailPage() {
         onClose={() => setConfirmOpen(false)}
         onConfirm={handleWriteOff}
         title="Write off this item?"
-        description={`This will permanently write off ${item.sku || item.id.slice(0, 8)}. This action cannot be undone.`}
+        description={`This will permanently write off ${item.sku || item.barcode || "this item"}. This action cannot be undone.`}
         confirmLabel="Yes, write off"
         confirmVariant="danger"
         isLoading={writeOffState.isLoading}

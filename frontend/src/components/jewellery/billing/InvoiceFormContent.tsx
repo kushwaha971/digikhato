@@ -376,6 +376,8 @@ export function InvoiceFormContent({
 
   const submitInvoice = useCallback(async (mode: "draft" | "issue") => {
     setFormError(null);
+    const effectiveInvoiceType: InvoiceType = initialInvoiceType === "CREDIT_NOTE" ? "CREDIT_NOTE" : invoiceType;
+    const effectiveReferenceInvoiceId = (referenceInvoiceId || initialReferenceInvoiceId).trim();
 
     const filteredLines = lines.filter((line) => line.description.trim() && Number(line.net_wt) > 0);
     if (filteredLines.length === 0) {
@@ -383,16 +385,16 @@ export function InvoiceFormContent({
       setLineOpen(true);
       return;
     }
-    if (invoiceType === "CREDIT_NOTE" && !referenceInvoiceId.trim()) {
-      setFormError("Reference invoice ID is required for credit note.");
+    if (effectiveInvoiceType === "CREDIT_NOTE" && !effectiveReferenceInvoiceId) {
+      setFormError("Reference invoice is required for credit note.");
       setSaleOpen(true);
       return;
     }
 
     const payload: JwlCreateInvoiceParams = {
       customer: customerId || undefined,
-      reference_invoice: invoiceType === "CREDIT_NOTE" ? referenceInvoiceId.trim() : undefined,
-      invoice_type: invoiceType,
+      reference_invoice: effectiveInvoiceType === "CREDIT_NOTE" ? effectiveReferenceInvoiceId : undefined,
+      invoice_type: effectiveInvoiceType,
       seller_state_code: sellerStateCode,
       place_of_supply_state_code: placeStateCode,
       discount_amount: discountAmount || "0",
@@ -443,7 +445,7 @@ export function InvoiceFormContent({
     } catch {
       setFormError("Could not save invoice. Check values and try again.");
     }
-  }, [lines, payments, oldGoldRows, invoiceType, referenceInvoiceId, customerId,
+  }, [lines, payments, oldGoldRows, invoiceType, referenceInvoiceId, initialInvoiceType, initialReferenceInvoiceId, customerId,
       sellerStateCode, placeStateCode, discountAmount, notes,
       createInvoice, issueInvoice, onSuccess, router]);
 
@@ -475,6 +477,7 @@ export function InvoiceFormContent({
               label="Document type"
               value={invoiceType}
               onChange={(event) => setInvoiceType(event.target.value as InvoiceType)}
+              disabled={initialInvoiceType === "CREDIT_NOTE"}
             >
               {INVOICE_TYPE_FORM_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -545,7 +548,7 @@ export function InvoiceFormContent({
                       type="button"
                       onMouseDown={() => {
                         setReferenceInvoiceId(inv.id);
-                        setReferenceInvoiceNo(inv.voucher_no || inv.id);
+                        setReferenceInvoiceNo(inv.voucher_no || "Issued invoice");
                         setRefSearch("");
                         setRefDropdownOpen(false);
                       }}

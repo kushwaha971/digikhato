@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 
 import { CustomerSearchSelect } from "@/components/jewellery/shared/CustomerSearchSelect";
 import { Screen } from "@/components/layout/Screen";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Drawer } from "@/components/ui/Drawer";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PlusIcon } from "@/components/ui/icons";
 import { FilterSelect, ResponsiveFilterPanel } from "@/components/ui/ResponsiveFilterPanel";
@@ -63,13 +63,13 @@ function LoanCard({ loan }: Readonly<{ loan: JwlPledgeLoan }>) {
 }
 
 export default function GoldPledgePage() {
-  const router = useRouter();
   const dispatch = useAppDispatch();
   const filters = useAppSelector((state) => state.jewelleryFilters.pledge);
   const { status, customerId, page } = filters;
 
   const [draftStatus, setDraftStatus] = useState<LoanStatus | "">(status as LoanStatus | "");
   const [draftCustomer, setDraftCustomer] = useState(customerId);
+  const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
 
   const { data, isFetching } = useListPledgeLoansQuery({
     status: status || undefined,
@@ -122,7 +122,7 @@ export default function GoldPledgePage() {
             />
           </ResponsiveFilterPanel>
 
-          <Button onClick={() => router.push("/jewellery/gold-pledge/new")} leftIcon={<PlusIcon />}>
+          <Button onClick={() => setCreateDrawerOpen(true)} leftIcon={<PlusIcon />}>
             New Loan
           </Button>
         </div>
@@ -138,7 +138,7 @@ export default function GoldPledgePage() {
           description={hasFilters ? "No loans match your current filters." : "Create your first gold pledge loan to get started."}
           action={{
             label: "New Loan",
-            onClick: () => router.push("/jewellery/gold-pledge/new"),
+            onClick: () => setCreateDrawerOpen(true),
           }}
         />
       ) : null}
@@ -159,6 +159,19 @@ export default function GoldPledgePage() {
           ) : null}
         </>
       ) : null}
+
+      <Drawer
+        open={createDrawerOpen}
+        onClose={() => setCreateDrawerOpen(false)}
+        title="New Gold Pledge Loan"
+        size="2xl"
+      >
+        <iframe
+          src="/jewellery/gold-pledge/new"
+          className="w-full h-[80vh] rounded-xl border border-border"
+          title="Create gold pledge loan form"
+        />
+      </Drawer>
     </Screen>
   );
 }

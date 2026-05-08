@@ -144,7 +144,9 @@ function KarigarsView() {
     },
     validationSchema: karigarSchema,
     onSubmit: async (values, helpers) => {
+      const generatedCode = `KRG${Date.now().toString().slice(-6)}`;
       const payload: Record<string, string> = {
+        code: generatedCode,
         name: values.name,
         mobile: values.mobile,
         specialization: values.specialization,
