@@ -103,7 +103,7 @@ export default function PortalPage() {
                 <div className="app-panel p-4 card-clickable">
                   <div className="flex items-center justify-between mb-3">
                     <div>
-                      <p className="font-semibold text-text">{`Account ${account.uuid?.slice(0, 8) ?? account.id}`}</p>
+                      <p className="font-semibold text-text">{`Account #${account.id}`}</p>
                       <p className="text-xs text-muted">
                         {formatDateDMY(account.start_date)} · {account.duration_days ? `${account.duration_days} days` : "Open-ended"}
                       </p>

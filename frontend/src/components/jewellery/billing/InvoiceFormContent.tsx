@@ -70,6 +70,9 @@ function createEmptyLine(defaultRate = "0"): InvoiceLineDraft {
     hallmarking_fee: "0",
     stone_value: "0",
     gst_rate_pct: "3",
+    auto_rate_per_gram: defaultRate,
+    rate_overridden: false,
+    rate_unavailable: false,
   };
 }
 
@@ -263,7 +266,11 @@ export function InvoiceFormContent({
   const handleLinePatch = useCallback((index: number, patch: Partial<InvoiceLineDraft>) => {
     setLines((prev) => {
       const next = [...prev];
-      next[index] = { ...next[index], ...patch };
+      const merged = { ...next[index], ...patch };
+      if (Object.prototype.hasOwnProperty.call(patch, "rate_per_gram") && merged.auto_rate_per_gram) {
+        merged.rate_overridden = (patch.rate_per_gram ?? "") !== (merged.auto_rate_per_gram ?? "");
+      }
+      next[index] = merged;
       return next;
     });
   }, []);
@@ -279,19 +286,24 @@ export function InvoiceFormContent({
       // Auto-fill rate from live rates for this item's metal/purity
       const matchedRate = rateRows?.find(
         (r) => r.metal === item.metal_code && r.purity === item.purity_code,
-      )?.sell_rate ?? next[index].rate_per_gram;
+      )?.sell_rate;
+      const resolvedRate = matchedRate ?? "0";
 
       next[index] = {
         ...next[index],
         item: itemId,
         huid: item.huid ?? "",
         description: next[index].description || `${item.design_name || item.sku} ${item.purity_code}`.trim(),
+        hsn_code: next[index].hsn_code || item.hsn_code || "7113",
         metal_code: item.metal_code || next[index].metal_code,
         purity_code: item.purity_code || next[index].purity_code,
         gross_wt: item.gross_wt || next[index].gross_wt,
         net_wt: item.net_wt || next[index].net_wt,
         stone_wt: item.stone_wt || next[index].stone_wt,
-        rate_per_gram: matchedRate,
+        rate_per_gram: resolvedRate,
+        auto_rate_per_gram: resolvedRate,
+        rate_overridden: false,
+        rate_unavailable: !matchedRate,
       };
       return next;
     });
@@ -301,7 +313,10 @@ export function InvoiceFormContent({
     if (!scanCode.trim()) return;
     setScanError(null);
     try {
-      const item = await scanItem(scanCode.trim()).unwrap();
+      const item = await scanItem({
+        code: scanCode.trim(),
+        status: invoiceType === "CREDIT_NOTE" ? "SOLD" : "IN_STOCK",
+      }).unwrap();
       setLines((prev) => {
         const next = [...prev];
         if (next.length === 0) {
@@ -313,11 +328,15 @@ export function InvoiceFormContent({
           item: item.id,
           huid: item.huid || "",
           description: first.description || item.design_name || item.sku,
+          hsn_code: first.hsn_code || item.hsn_code || "7113",
           metal_code: item.metal_code,
           purity_code: item.purity_code,
           gross_wt: item.gross_wt,
           net_wt: item.net_wt,
           rate_per_gram: first.rate_per_gram || defaultRate,
+          auto_rate_per_gram: first.rate_per_gram || defaultRate,
+          rate_overridden: false,
+          rate_unavailable: false,
         };
         return next;
       });
@@ -326,7 +345,7 @@ export function InvoiceFormContent({
     } catch {
       setScanError("Item not found for this code.");
     }
-  }, [scanCode, scanItem, defaultRate]);
+  }, [scanCode, scanItem, defaultRate, invoiceType]);
 
   const addLine = useCallback(() => {
     const hasIncomplete = lines.some((line) => !isLineComplete(line));
@@ -450,6 +469,22 @@ export function InvoiceFormContent({
       createInvoice, issueInvoice, onSuccess, router]);
 
   const preview = calculateState.data;
+  const duplicateLineWarningByIndex = useMemo<Record<number, string>>(() => {
+    const firstSeenByItem = new Map<string, number>();
+    const warningByIndex: Record<number, string> = {};
+    lines.forEach((line, idx) => {
+      if (!line.item) return;
+      if (!firstSeenByItem.has(line.item)) {
+        firstSeenByItem.set(line.item, idx);
+        return;
+      }
+      const firstIndex = firstSeenByItem.get(line.item);
+      if (typeof firstIndex === "number") {
+        warningByIndex[idx] = `Already on line ${firstIndex + 1}. Duplicate may cause stock conflict.`;
+      }
+    });
+    return warningByIndex;
+  }, [lines]);
 
   const lineTotal = lines.length;
   const payableTotal = preview?.total_amount;
@@ -646,6 +681,7 @@ export function InvoiceFormContent({
                   collapsible
                   expanded={lineExpanded[index] ?? (index === 0 && lines.length === 1)}
                   onToggleExpand={toggleLineExpanded}
+                  duplicateWarning={duplicateLineWarningByIndex[index]}
                 />
               ))}
             </div>

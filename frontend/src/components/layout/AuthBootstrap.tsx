@@ -13,6 +13,7 @@ const PUBLIC_ROUTES = new Set<string>([ROUTES.public.home, ROUTES.public.login, 
 
 function resolveAuthenticatedRedirect(user: AuthUser): string {
   if (user.role === "super_admin") return ROUTES.app.superAdmin.dashboard;
+  if (user.role === "borrower") return ROUTES.app.portal;
 
   const defaultModule = resolveDefaultModule(user);
   if (!defaultModule) return ROUTES.app.moduleAccess;

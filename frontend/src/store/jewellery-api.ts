@@ -25,6 +25,7 @@ export interface JwlItem {
   design: string;
   design_name: string;
   category_name: string;
+  hsn_code: string;
   metal: string;
   metal_code: string;
   purity: string;
@@ -73,6 +74,7 @@ export interface JwlItemListParams {
   branch?: string;
   status?: string;
   purity?: string;
+  purity_code?: string;
   metal_code?: string;
   hallmark_status?: string;
   design?: string;
@@ -457,6 +459,13 @@ export interface JwlAdminFlags {
   [key: string]: boolean;
 }
 
+export interface JwlAdminControls {
+  branch_name: string;
+  feature_flags: JwlAdminFlags;
+  einvoice_applicable: boolean;
+  updated_at?: string | null;
+}
+
 export interface JwlTrashItem {
   entity: string;
   id: string;
@@ -483,6 +492,10 @@ export interface JwlKarigar {
   default_wastage_pct: string;
   specialization: string;
   is_active: boolean;
+  total_pure_issued?: string;
+  total_pure_received?: string;
+  avg_wastage_pct?: string;
+  open_issues?: number;
   branch_name?: string;
   created_at: string;
   updated_at?: string;
@@ -681,8 +694,8 @@ export const jewelleryApi = api.injectEndpoints({
       query: ({ id, ...data }) => ({ url: `jwl/v1/items/${id}/`, method: "PATCH", data }),
       invalidatesTags: ["Jewellery"],
     }),
-    scanItem: builder.query<JwlItemDetail, string>({
-      query: (code) => ({ url: `jwl/v1/items/scan/${code}/` }),
+    scanItem: builder.query<JwlItemDetail, { code: string; status?: string }>({
+      query: ({ code, status }) => ({ url: `jwl/v1/items/scan/${code}/`, params: { status } }),
     }),
     writeOffItem: builder.mutation<JwlStockMovement, { id: string; reason: string }>({
       query: ({ id, reason }) => ({ url: `jwl/v1/items/${id}/write-off/`, method: "POST", data: { reason } }),
@@ -884,11 +897,11 @@ export const jewelleryApi = api.injectEndpoints({
     }),
 
     // Admin Controls
-    getAdminFeatureFlags: builder.query<JwlAdminFlags, void>({
+    getAdminFeatureFlags: builder.query<JwlAdminControls, void>({
       query: () => ({ url: "jwl/v1/admin/feature-flags/" }),
       providesTags: ["Jewellery"],
     }),
-    updateAdminFeatureFlags: builder.mutation<JwlAdminFlags, JwlAdminFlags>({
+    updateAdminFeatureFlags: builder.mutation<JwlAdminControls, { feature_flags?: JwlAdminFlags; einvoice_applicable?: boolean }>({
       query: (data) => ({ url: "jwl/v1/admin/feature-flags/", method: "PATCH", data }),
       invalidatesTags: ["Jewellery"],
     }),
@@ -925,8 +938,11 @@ export const jewelleryApi = api.injectEndpoints({
       query: ({ id, ...data }) => ({ url: `jwl/v1/karigar/${id}/`, method: "PATCH", data }),
       invalidatesTags: ["Jewellery"],
     }),
-    listOrders: builder.query<PaginatedResponse<JwlCustomerOrder>, { status?: string; customer?: string }>({
-      query: (params) => ({ url: "jwl/v1/orders/", params }),
+    listOrders: builder.query<PaginatedResponse<JwlCustomerOrder>, { status?: string; customer?: string; karigar?: string; karigar_id?: string }>({
+      query: (params) => {
+        const { karigar, karigar_id, ...rest } = params;
+        return { url: "jwl/v1/orders/", params: { ...rest, karigar_id: karigar_id ?? karigar } };
+      },
       providesTags: ["Jewellery"],
     }),
     createOrder: builder.mutation<JwlCustomerOrder, Partial<JwlCustomerOrder>>({
@@ -937,16 +953,36 @@ export const jewelleryApi = api.injectEndpoints({
       query: ({ id, status }) => ({ url: `jwl/v1/orders/${id}/advance/`, method: "POST", data: { status } }),
       invalidatesTags: ["Jewellery"],
     }),
-    listKarigarIssues: builder.query<PaginatedResponse<JwlKarigarIssue>, { karigar?: string; order?: string }>({
-      query: (params) => ({ url: "jwl/v1/karigar-issues/", params }),
+    listKarigarIssues: builder.query<PaginatedResponse<JwlKarigarIssue>, { karigar?: string; karigar_id?: string; order?: string; order_id?: string }>({
+      query: (params) => {
+        const { karigar, karigar_id, order, order_id, ...rest } = params;
+        return {
+          url: "jwl/v1/karigar-issues/",
+          params: {
+            ...rest,
+            karigar_id: karigar_id ?? karigar,
+            order_id: order_id ?? order,
+          },
+        };
+      },
       providesTags: ["Jewellery"],
     }),
     createKarigarIssue: builder.mutation<JwlKarigarIssue, Record<string, unknown>>({
       query: (data) => ({ url: "jwl/v1/karigar-issues/", method: "POST", data }),
       invalidatesTags: ["Jewellery"],
     }),
-    listKarigarReceipts: builder.query<PaginatedResponse<JwlKarigarReceipt>, { karigar?: string; issue?: string }>({
-      query: (params) => ({ url: "jwl/v1/karigar-receipts/", params }),
+    listKarigarReceipts: builder.query<PaginatedResponse<JwlKarigarReceipt>, { karigar?: string; karigar_id?: string; issue?: string; issue_id?: string }>({
+      query: (params) => {
+        const { karigar, karigar_id, issue, issue_id, ...rest } = params;
+        return {
+          url: "jwl/v1/karigar-receipts/",
+          params: {
+            ...rest,
+            karigar_id: karigar_id ?? karigar,
+            issue_id: issue_id ?? issue,
+          },
+        };
+      },
       providesTags: ["Jewellery"],
     }),
     createKarigarReceipt: builder.mutation<JwlKarigarReceipt, Record<string, unknown>>({
@@ -961,6 +997,12 @@ export const jewelleryApi = api.injectEndpoints({
     >({
       query: (params) => ({ url: "jwl/v1/outstanding/", params }),
       providesTags: ["Jewellery"],
+    }),
+    exportOutstandingCsv: builder.query<
+      Blob,
+      { ageing?: "30" | "60" | "90" | "90+"; customer?: string; branch_name?: string; include_zero?: boolean }
+    >({
+      query: (params) => ({ url: "jwl/v1/outstanding/export/", params, responseType: "blob" as const }),
     }),
     getOutstandingParty: builder.query<JwlOutstandingDetail, string>({
       query: (id) => ({ url: `jwl/v1/outstanding/${id}/` }),
@@ -1097,6 +1139,7 @@ export const {
   useListKarigarReceiptsQuery,
   useCreateKarigarReceiptMutation,
   useListOutstandingQuery,
+  useLazyExportOutstandingCsvQuery,
   useGetOutstandingPartyQuery,
   usePostOutstandingAdjustmentMutation,
   useListItemPuritySummaryQuery,

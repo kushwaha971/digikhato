@@ -89,10 +89,16 @@ class ItemViewSet(JewelleryTenantScopedViewSet):
     @action(detail=False, methods=["get"], url_path=r"scan/(?P<code>[^/.]+)")
     def scan(self, request, code=None):
         tenant = get_effective_tenant(request.user)
+        required_status = (request.query_params.get("status") or "").strip()
         try:
             item = scan_item(tenant, code)
         except Item.DoesNotExist:
             return Response({"detail": f"No item found for code: {code}"}, status=status.HTTP_404_NOT_FOUND)
+        if required_status and item.status != required_status:
+            return Response(
+                {"detail": f"Item found but not in required status '{required_status}'."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
         serializer = ItemDetailSerializer(item, context={"request": request})
         return Response(serializer.data)

@@ -10,6 +10,16 @@ from apps.loans.models import Loan, LoanStatus
 from apps.loans.services import quantize_amount
 
 
+def _next_unique_collection_code(*, tenant, date) -> str | None:
+    if not tenant:
+        return None
+    for _ in range(20):
+        candidate = generate_collection_code(tenant=tenant, date=date)
+        if not Collection.objects.filter(collection_code=candidate).exists():
+            return candidate
+    return None
+
+
 @transaction.atomic
 def create_collection(
     *,
@@ -28,7 +38,7 @@ def create_collection(
 ):
     loan = Loan.objects.select_for_update().get(id=loan_id, borrower_id=borrower_id)
     tenant = loan.borrower.tenant
-    collection_code = generate_collection_code(tenant=tenant, date=date) if tenant else None
+    collection_code = _next_unique_collection_code(tenant=tenant, date=date)
 
     collection = Collection.objects.create(
         collection_code=collection_code,

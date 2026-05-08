@@ -7,6 +7,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.common.constants import JwlRoleCode, ModuleCode
+from apps.jewellery.models.admin import AdminControl
 from apps.jewellery.models.billing import Customer, OldGoldPurchase, SalesInvoice, SalesInvoiceLine
 from apps.jewellery.models.master import Category, Design, Metal, NumberSeries, Purity
 from apps.jewellery.services.billing import (
@@ -413,6 +414,16 @@ class BillingApiTests(APITestCase):
         self.assertIn("share_url", send_resp.data)
 
     def test_einvoice_generation_endpoint(self):
+        AdminControl.objects.create(
+            tenant=self.tenant,
+            branch_name="",
+            created_by=self.tenant,
+            updated_by=self.tenant,
+            einvoice_applicable=True,
+        )
+        self.customer.gstin = "27ABCDE1234F1Z5"
+        self.customer.save(update_fields=["gstin", "updated_at"])
+
         create_url = reverse("jewellery:sales-invoice-list")
         create_resp = self.client.post(create_url, {
             "customer": str(self.customer.id),

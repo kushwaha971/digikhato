@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useCallback, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useFormik } from "formik";
 import * as Yup from "yup";
@@ -96,6 +96,17 @@ const karigarSchema = Yup.object({
   kyc_aadhaar_masked: Yup.string(),
 });
 
+type KarigarEditValues = {
+  name: string;
+  mobile: string;
+  specialization: string;
+  default_labour_rate: string;
+  default_wastage_pct: string;
+  kyc_pan: string;
+  kyc_aadhaar_masked: string;
+  is_active: boolean;
+};
+
 function KarigarRow({
   karigar,
   onEdit,
@@ -109,6 +120,9 @@ function KarigarRow({
           {karigar.specialization ? <><span className="mx-1.5">·</span>{karigar.specialization}</> : null}
         </p>
         {karigar.code ? <p className="text-xs text-muted mt-0.5">Code: {karigar.code}</p> : null}
+        <p className="text-xs text-muted mt-1">
+          Issued: {karigar.total_pure_issued ?? "0"}g · Returned: {karigar.total_pure_received ?? "0"}g · Open: {karigar.open_issues ?? 0} · Wastage: {karigar.avg_wastage_pct ?? "0"}%
+        </p>
       </div>
       <div className="flex items-center gap-2">
         <Badge variant={karigar.is_active ? "success" : "warning"}>
@@ -127,6 +141,8 @@ function KarigarsView() {
   const [editingId, setEditingId] = useState<string>("");
   const [editOpen, setEditOpen] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [deactivateWarnOpen, setDeactivateWarnOpen] = useState(false);
+  const [pendingDeactivateValues, setPendingDeactivateValues] = useState<KarigarEditValues | null>(null);
   const { data, isFetching } = useListKarigarsQuery({});
   const { data: editingKarigar } = useGetKarigarQuery(editingId, { skip: !editingId });
   const [createKarigar, createState] = useCreateKarigarMutation();
@@ -169,7 +185,45 @@ function KarigarsView() {
 
   const karigars = data?.results ?? [];
 
-  const editFormik = useFormik({
+  const applyEdit = useCallback(async (values: KarigarEditValues) => {
+    if (!editingId) return;
+    setEditError(null);
+    try {
+      const payload: Record<string, string | boolean | null> = {
+        name: values.name,
+        mobile: values.mobile,
+        specialization: values.specialization,
+        default_wastage_pct: values.default_wastage_pct || "0",
+        is_active: values.is_active,
+      };
+      if (values.default_labour_rate.trim()) {
+        payload.default_labour_rate = values.default_labour_rate;
+      } else {
+        payload.default_labour_rate = null;
+      }
+      if (values.kyc_pan.trim()) {
+        payload.kyc_pan = values.kyc_pan.toUpperCase();
+      } else {
+        payload.kyc_pan = "";
+      }
+      if (values.kyc_aadhaar_masked.trim()) {
+        payload.kyc_aadhaar_masked = values.kyc_aadhaar_masked;
+      } else {
+        payload.kyc_aadhaar_masked = "";
+      }
+      await updateKarigar({
+        id: editingId,
+        ...payload,
+      }).unwrap();
+      setEditOpen(false);
+      setDeactivateWarnOpen(false);
+      setPendingDeactivateValues(null);
+    } catch {
+      setEditError("Could not update karigar. Please verify values and try again.");
+    }
+  }, [editingId, updateKarigar]);
+
+  const editFormik = useFormik<KarigarEditValues>({
     enableReinitialize: true,
     initialValues: {
       name: editingKarigar?.name ?? "",
@@ -183,39 +237,13 @@ function KarigarsView() {
     },
     validationSchema: karigarSchema,
     onSubmit: async (values) => {
-      if (!editingId) return;
-      setEditError(null);
-      try {
-        const payload: Record<string, string | boolean | null> = {
-          name: values.name,
-          mobile: values.mobile,
-          specialization: values.specialization,
-          default_wastage_pct: values.default_wastage_pct || "0",
-          is_active: values.is_active,
-        };
-        if (values.default_labour_rate.trim()) {
-          payload.default_labour_rate = values.default_labour_rate;
-        } else {
-          payload.default_labour_rate = null;
-        }
-        if (values.kyc_pan.trim()) {
-          payload.kyc_pan = values.kyc_pan.toUpperCase();
-        } else {
-          payload.kyc_pan = "";
-        }
-        if (values.kyc_aadhaar_masked.trim()) {
-          payload.kyc_aadhaar_masked = values.kyc_aadhaar_masked;
-        } else {
-          payload.kyc_aadhaar_masked = "";
-        }
-        await updateKarigar({
-          id: editingId,
-          ...payload,
-        }).unwrap();
-        setEditOpen(false);
-      } catch {
-        setEditError("Could not update karigar. Please verify values and try again.");
+      const openIssues = editingKarigar?.open_issues ?? 0;
+      if (editingKarigar?.is_active && !values.is_active && openIssues > 0) {
+        setPendingDeactivateValues(values);
+        setDeactivateWarnOpen(true);
+        return;
       }
+      await applyEdit(values);
     },
   });
 
@@ -321,6 +349,11 @@ function KarigarsView() {
           </div>
         ) : null}
         <form className="space-y-3" onSubmit={editFormik.handleSubmit}>
+          {editingKarigar ? (
+            <div className="rounded-xl border border-border bg-surface2 p-3 text-xs text-muted">
+              Issued: {editingKarigar.total_pure_issued ?? "0"}g · Returned: {editingKarigar.total_pure_received ?? "0"}g · Open: {editingKarigar.open_issues ?? 0} · Wastage: {editingKarigar.avg_wastage_pct ?? "0"}%
+            </div>
+          ) : null}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="Name"
@@ -377,6 +410,32 @@ function KarigarsView() {
           </label>
         </form>
       </Drawer>
+
+      <Modal
+        open={deactivateWarnOpen}
+        onClose={() => setDeactivateWarnOpen(false)}
+        title="Karigar has open issues"
+        footer={(
+          <>
+            <Button type="button" size="sm" variant="secondary" onClick={() => setDeactivateWarnOpen(false)}>
+              Keep Active
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="danger"
+              onClick={() => { if (pendingDeactivateValues) void applyEdit(pendingDeactivateValues); }}
+              loading={updateState.isLoading}
+            >
+              Deactivate anyway
+            </Button>
+          </>
+        )}
+      >
+        <p className="text-sm text-muted">
+          This karigar has {editingKarigar?.open_issues ?? 0} open issue(s). You can deactivate now, but open work will remain processable.
+        </p>
+      </Modal>
     </>
   );
 }

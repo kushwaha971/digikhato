@@ -17,6 +17,7 @@ interface RouteGuardProps {
 
 function getDefaultRedirect(user: AuthUser): string {
   if (user.role === "super_admin") return ROUTES.app.superAdmin.dashboard;
+  if (user.role === "borrower") return ROUTES.app.portal;
   const defaultModule = resolveDefaultModule(user);
   if (!defaultModule) return ROUTES.app.moduleAccess;
   return getModuleLandingRoute(defaultModule);

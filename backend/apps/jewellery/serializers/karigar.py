@@ -1,7 +1,9 @@
 """Jewellery karigar serializers (Phase B-2.1)."""
 
 import re
+from decimal import Decimal
 
+from django.db.models import Avg, Sum
 from rest_framework import serializers
 
 from apps.jewellery.models.karigar import (
@@ -13,6 +15,11 @@ from apps.jewellery.models.karigar import (
 
 
 class KarigarSerializer(serializers.ModelSerializer):
+    total_pure_issued = serializers.SerializerMethodField()
+    total_pure_received = serializers.SerializerMethodField()
+    avg_wastage_pct = serializers.SerializerMethodField()
+    open_issues = serializers.SerializerMethodField()
+
     def validate_mobile(self, value):
         cleaned = (value or "").strip()
         if cleaned.startswith("+91"):
@@ -33,9 +40,25 @@ class KarigarSerializer(serializers.ModelSerializer):
         fields = [
             "id", "code", "name", "mobile", "kyc_pan", "kyc_aadhaar_masked",
             "default_labour_rate", "default_wastage_pct", "specialization", "is_active",
+            "total_pure_issued", "total_pure_received", "avg_wastage_pct", "open_issues",
             "branch_name", "created_at", "updated_at",
         ]
         read_only_fields = ["id", "branch_name", "created_at", "updated_at"]
+
+    def get_total_pure_issued(self, obj):
+        total = obj.issues.filter(deleted_at__isnull=True).aggregate(total=Sum("pure_gold_wt_issued"))["total"]
+        return str(total or Decimal("0"))
+
+    def get_total_pure_received(self, obj):
+        total = obj.receipts.filter(deleted_at__isnull=True).aggregate(total=Sum("pure_gold_wt_received"))["total"]
+        return str(total or Decimal("0"))
+
+    def get_avg_wastage_pct(self, obj):
+        avg = obj.receipts.filter(deleted_at__isnull=True).aggregate(avg=Avg("wastage_actual_pct"))["avg"]
+        return str(avg or Decimal("0"))
+
+    def get_open_issues(self, obj):
+        return obj.issues.filter(deleted_at__isnull=True, receipts__isnull=True).count()
 
 
 class CustomerOrderSerializer(serializers.ModelSerializer):

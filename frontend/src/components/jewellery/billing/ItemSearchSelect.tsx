@@ -58,7 +58,7 @@ function ItemSearchSelectBase({
 
   async function handleBarcodeScan(code: string) {
     try {
-      const item = await triggerScan(code).unwrap();
+      const item = await triggerScan({ code, status: statusFilter }).unwrap();
       handleSelect(item as JwlItem);
     } catch {
       // Not found — fall through and let user see search results

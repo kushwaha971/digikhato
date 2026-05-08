@@ -26,11 +26,11 @@ export default function PortalAccountDetailPage() {
 
   return (
     <Screen
-      title={account ? `Account ${account.uuid?.slice(0, 8) ?? account.id}` : "Account"}
+      title={account ? `Account #${account.id}` : "Account"}
       backHref="/portal"
       breadcrumb={[
         { label: "My Accounts", href: "/portal" },
-        { label: account ? `Account ${account.uuid?.slice(0, 8) ?? account.id}` : "Account" },
+        { label: account ? `Account #${account.id}` : "Account" },
       ]}
     >
       <div className="grid grid-cols-3 gap-3 mb-6">

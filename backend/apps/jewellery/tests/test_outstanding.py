@@ -312,6 +312,7 @@ class OutstandingApiTests(APITestCase):
             {
                 "movement_type": "MANUAL_ADJUSTMENT",
                 "amount_delta": "500.00",
+                "notes": "Manual adjustment for test",
                 "txn_date": str(date.today()),
             },
             format="json",
@@ -325,7 +326,7 @@ class OutstandingApiTests(APITestCase):
         balance.last_txn_date = date.today() - timedelta(days=95)
         balance.save(update_fields=["last_txn_date"])
 
-        resp = self.client.get(OUTSTANDING_URL)
+        resp = self.client.get(f"{OUTSTANDING_URL}?include_zero=true")
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(len(resp.data), 1)
         self.assertTrue(resp.data[0]["overdue_90_plus"])

@@ -1,9 +1,9 @@
+import re
 from datetime import date
 from decimal import Decimal
 
 from rest_framework import serializers
 
-from apps.common.id_generator import generate_document_code
 from apps.loans.alerts import derive_payment_status, getLoanAlertStatus, sync_loan_due_fields
 from apps.loans.models import Loan, LoanStatus
 from apps.loans.services import calculate_loan_amounts, quantize_amount
@@ -68,7 +68,7 @@ class LoanSerializer(serializers.ModelSerializer):
         borrower = validated_data["borrower"]
         tenant = borrower.tenant or get_effective_tenant(self.context["request"].user)
         if tenant and not validated_data.get("loan_code"):
-            validated_data["loan_code"] = generate_document_code(doc_type="LN", tenant=tenant)
+            validated_data["loan_code"] = self._next_unique_loan_code()
         amounts = calculate_loan_amounts(
             principal=validated_data["principal"],
             interest_rate=validated_data["interest_rate"],
@@ -81,6 +81,19 @@ class LoanSerializer(serializers.ModelSerializer):
         sync_loan_due_fields(loan)
         self._sync_due_alert_notifications(loan)
         return loan
+
+    @staticmethod
+    def _next_unique_loan_code() -> str:
+        # Global uniqueness is enforced on loan_code, so compute from the global max LN-*.
+        max_seq = 0
+        for code in Loan.objects.filter(loan_code__startswith="LN-").values_list("loan_code", flat=True):
+            if not code:
+                continue
+            match = re.match(r"^LN-(\d+)$", code)
+            if not match:
+                continue
+            max_seq = max(max_seq, int(match.group(1)))
+        return f"LN-{max_seq + 1:03d}"
 
     def update(self, instance, validated_data):
         for key in ["principal", "interest_rate", "tenure_days", "start_date", "borrower", "interest_type", "notes"]:

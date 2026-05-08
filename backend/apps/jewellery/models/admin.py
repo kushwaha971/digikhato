@@ -8,6 +8,7 @@ class AdminControl(JewelleryBaseModel):
     """Tenant/branch scoped admin controls for Jewellery ERP."""
 
     feature_flags = models.JSONField(default=dict, blank=True)
+    einvoice_applicable = models.BooleanField(default=False)
     lock_period_end = models.DateField(null=True, blank=True)
     lock_period_reason = models.CharField(max_length=500, blank=True, default="")
     lock_set_by = models.ForeignKey(

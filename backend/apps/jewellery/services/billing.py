@@ -20,6 +20,7 @@ from apps.jewellery.models.billing import (
     SalesInvoicePayment,
 )
 from apps.jewellery.models.inventory import Item
+from apps.jewellery.services.admin import get_admin_control
 from apps.jewellery.services.number_series import get_next_number
 from apps.jewellery.services.outstanding import post_movement
 from apps.notifications.models import Notification, NotificationType
@@ -45,6 +46,14 @@ def build_invoice_pdf(invoice: SalesInvoice) -> bytes:
         f"Date: {_pdf_escape(str(invoice.voucher_date or ''))}",
         f"Status: {_pdf_escape(invoice.status)}",
         f"Customer: {_pdf_escape(invoice.customer.name if invoice.customer else 'Walk-in customer')}",
+        (
+            "IRN: "
+            + _pdf_escape(
+                f"{invoice.e_invoice_irn} (Simulated - not GSTN filed)"
+                if invoice.e_invoice_irn and invoice.e_invoice_is_simulated
+                else (invoice.e_invoice_irn or "Not generated")
+            )
+        ),
         "",
         "Line Items:",
     ]
@@ -52,7 +61,7 @@ def build_invoice_pdf(invoice: SalesInvoice) -> bytes:
         desc = line.description or f"Line {idx}"
         lines.append(
             _pdf_escape(
-                f"{idx}. {desc} | {line.net_wt}g | Rate {line.rate_per_gram} | Total {line.line_total}"
+                f"{idx}. {desc} | HUID {line.huid or '-'} | {line.net_wt}g | Rate {line.rate_per_gram} | Total {line.line_total}"
             )
         )
     lines.extend(
@@ -701,6 +710,15 @@ def generate_e_invoice(invoice: SalesInvoice, generated_by: Any) -> SalesInvoice
         raise ValueError("Only issued invoices can generate e-invoice.")
     if invoice.invoice_type != "TAX_INVOICE":
         raise ValueError("E-invoice is currently supported only for tax invoices.")
+    if not (invoice.customer and (invoice.customer.gstin or "").strip()):
+        raise ValueError("E-invoice can be generated only for B2B invoices with customer GSTIN.")
+    if Decimal(str(invoice.total_amount or "0")) <= 0:
+        raise ValueError("E-invoice cannot be generated for zero-value invoices.")
+
+    branch_name = invoice.branch_name or ""
+    admin_control = get_admin_control(invoice.tenant, branch_name)
+    if not admin_control or not admin_control.einvoice_applicable:
+        raise ValueError("E-invoice is not enabled for this branch.")
 
     if invoice.e_invoice_irn:
         return invoice
@@ -714,7 +732,7 @@ def generate_e_invoice(invoice: SalesInvoice, generated_by: Any) -> SalesInvoice
             str(invoice.total_amount),
         ]
     )
-    irn = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:32].upper()
+    irn = hashlib.sha256(seed.encode("utf-8")).hexdigest().upper()
     qr_payload = (
         f"IRN:{irn}|INV:{invoice.voucher_no or invoice.id}|DATE:{invoice.voucher_date or ''}|"
         f"AMT:{invoice.total_amount}|GSTIN:{invoice.customer.gstin if invoice.customer else ''}"

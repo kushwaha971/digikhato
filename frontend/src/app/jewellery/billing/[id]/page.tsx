@@ -17,6 +17,7 @@ import {
   useCancelInvoiceMutation,
   useConvertToInvoiceMutation,
   useGenerateEInvoiceMutation,
+  useGetAdminFeatureFlagsQuery,
   useGetInvoiceQuery,
   useLazyGetInvoicePdfQuery,
   useIssueInvoiceMutation,
@@ -38,6 +39,8 @@ export default function InvoiceDetailPage() {
   const [fetchInvoicePdf, pdfState] = useLazyGetInvoicePdfQuery();
   const [sendInvoice, sendState] = useSendInvoiceMutation();
   const [generateEInvoice, eInvoiceState] = useGenerateEInvoiceMutation();
+  const { data: adminControls } = useGetAdminFeatureFlagsQuery();
+  const einvoiceApplicable = Boolean(adminControls?.einvoice_applicable);
 
   const currentUser = useAppSelector((state) => state.auth.currentUser);
   const canCancel = useMemo(() => {
@@ -162,6 +165,7 @@ export default function InvoiceDetailPage() {
       && invoice.invoice_type === "TAX_INVOICE"
       && Boolean(invoice.customer_gstin?.trim())
       && !invoice.e_invoice_irn
+      && einvoiceApplicable
     ) {
       items.push({ label: "Generate IRN", onClick: openIrnDisclaimer, loading: eInvoiceState.isLoading });
     }
@@ -170,7 +174,7 @@ export default function InvoiceDetailPage() {
     }
     return items;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [invoice, pdfState.isFetching, eInvoiceState.isLoading]);
+  }, [invoice, pdfState.isFetching, eInvoiceState.isLoading, einvoiceApplicable]);
 
   if (isLoading || !invoice) {
     return (
@@ -181,6 +185,7 @@ export default function InvoiceDetailPage() {
   }
 
   const isB2BTaxInvoice = invoice.invoice_type === "TAX_INVOICE" && Boolean(invoice.customer_gstin?.trim());
+  const showB2BComplianceWarning = isB2BTaxInvoice && einvoiceApplicable && (!invoice.e_invoice_irn || invoice.e_invoice_is_simulated);
 
   const actions = (
     <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -260,15 +265,16 @@ export default function InvoiceDetailPage() {
       actions={actions}
     >
       <div className="space-y-4">
-        {invoice.e_invoice_is_simulated && invoice.e_invoice_irn && isB2BTaxInvoice ? (
+        {showB2BComplianceWarning ? (
           <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-4 py-3 flex items-start gap-3">
             <span className="text-amber-600 dark:text-amber-400 text-lg leading-none mt-0.5">⚠</span>
             <div className="text-sm">
               <p className="font-semibold text-amber-800 dark:text-amber-300">IRN not submitted to GSTN</p>
               <p className="text-amber-700 dark:text-amber-400 mt-0.5">
-                The IRN on this invoice was generated locally for internal reference only. It has <strong>not</strong> been
-                registered with the Government e-invoice portal. For B2B invoices above the threshold, you must submit
-                via your GSP/IRP to obtain a valid IRN before sharing with the buyer.
+                {!invoice.e_invoice_irn
+                  ? "This B2B invoice does not yet have an IRN. It is not e-invoice compliant until IRN registration."
+                  : "The IRN on this invoice was generated locally for internal reference only and has not been registered with GSTN/IRP."}{" "}
+                For B2B invoices above the threshold, submit via your GSP/IRP before sharing with the buyer.
               </p>
             </div>
           </div>

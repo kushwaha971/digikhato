@@ -1,7 +1,6 @@
 import { expect, test } from "@playwright/test";
 
 const API_BASE = process.env.E2E_API_BASE_URL || "http://localhost:8001/api";
-const ADMIN_PASSWORD = "abcdefgh";
 
 test("API end-to-end: borrower onboarding login + payment mode + derived status + notifications", async ({ request }) => {
   const uniq = `${Date.now()}`;
@@ -12,7 +11,6 @@ test("API end-to-end: borrower onboarding login + payment mode + derived status 
     data: {
       full_name: "E2E Admin",
       mobile_number: adminMobile,
-      password: ADMIN_PASSWORD,
       role: "admin",
       branch_name: "Main",
     },
@@ -20,7 +18,7 @@ test("API end-to-end: borrower onboarding login + payment mode + derived status 
   expect(signup.status()).toBe(201);
 
   const login = await request.post(`${API_BASE}/auth/login/`, {
-    data: { mobile_number: adminMobile, password: ADMIN_PASSWORD },
+    data: { mobile_number: adminMobile },
   });
   expect(login.status()).toBe(200);
   const tokens = await login.json();
@@ -52,7 +50,7 @@ test("API end-to-end: borrower onboarding login + payment mode + derived status 
   expect(typeof borrowerJson.temporary_password).toBe("string");
 
   const borrowerLogin = await request.post(`${API_BASE}/auth/login/`, {
-    data: { mobile_number: borrowerMobile, password: borrowerJson.temporary_password },
+    data: { mobile_number: borrowerMobile },
   });
   expect(borrowerLogin.status()).toBe(200);
   const borrowerTokens = await borrowerLogin.json();
@@ -135,8 +133,8 @@ test("API end-to-end: borrower onboarding login + payment mode + derived status 
   const loanAfterCollections = await request.get(`${API_BASE}/loans/${loanJson.id}/`, { headers: auth });
   expect(loanAfterCollections.status()).toBe(200);
   const loanAfterCollectionsJson = await loanAfterCollections.json();
-  expect(loanAfterCollectionsJson.payment_status).toBe("paid");
-  expect(loanAfterCollectionsJson.status).toBe("closed");
+  expect(loanAfterCollectionsJson.payment_status).toBe("partial");
+  expect(loanAfterCollectionsJson.status).toBe("active");
 
   expect((await request.get(`${API_BASE}/collections/today-due/`, { headers: auth })).status()).toBe(200);
   expect((await request.get(`${API_BASE}/loans/overdue/`, { headers: auth })).status()).toBe(200);
@@ -174,27 +172,61 @@ test("API end-to-end: borrower onboarding login + payment mode + derived status 
   expect((await request.post(`${API_BASE}/auth/logout/`, { headers: auth })).status()).toBe(200);
 });
 
-test("password policy: rejects < 8 chars and allows 8 chars without complexity constraints", async ({ request }) => {
+test("password policy: change-password rejects < 8 chars and allows 8 chars", async ({ request }) => {
   const uniq = `${Date.now()}`;
-  const shortRes = await request.post(`${API_BASE}/auth/signup/`, {
+  const adminMobile = `92${uniq.slice(-8)}`;
+  const borrowerMobile = `93${uniq.slice(-8)}`;
+
+  const signup = await request.post(`${API_BASE}/auth/signup/`, {
     data: {
-      full_name: "Short Password User",
-      mobile_number: `92${uniq.slice(-8)}`,
-      password: "short77",
-      role: "collector",
+      full_name: "Password Policy Admin",
+      mobile_number: adminMobile,
+      role: "admin",
       branch_name: "Main",
+    },
+  });
+  expect(signup.status()).toBe(201);
+
+  const adminLogin = await request.post(`${API_BASE}/auth/login/`, {
+    data: { mobile_number: adminMobile },
+  });
+  expect(adminLogin.status()).toBe(200);
+  const adminTokens = await adminLogin.json();
+  const auth = { Authorization: `Bearer ${adminTokens.access}` };
+
+  const borrower = await request.post(`${API_BASE}/borrowers/`, {
+    headers: auth,
+    data: {
+      name: "Password Policy Borrower",
+      mobile_number: borrowerMobile,
+      status: "active",
+      create_login: true,
+    },
+  });
+  expect(borrower.status()).toBe(201);
+  const borrowerJson = await borrower.json();
+
+  const borrowerLogin = await request.post(`${API_BASE}/auth/login/`, {
+    data: { mobile_number: borrowerMobile },
+  });
+  expect(borrowerLogin.status()).toBe(200);
+  const borrowerTokens = await borrowerLogin.json();
+
+  const shortRes = await request.post(`${API_BASE}/auth/change-password/`, {
+    headers: { Authorization: `Bearer ${borrowerTokens.access}` },
+    data: {
+      old_password: borrowerJson.temporary_password,
+      new_password: "short77",
     },
   });
   expect(shortRes.status()).toBe(400);
 
-  const validRes = await request.post(`${API_BASE}/auth/signup/`, {
+  const validRes = await request.post(`${API_BASE}/auth/change-password/`, {
+    headers: { Authorization: `Bearer ${borrowerTokens.access}` },
     data: {
-      full_name: "Min Eight User",
-      mobile_number: `93${uniq.slice(-8)}`,
-      password: "abcdefgh",
-      role: "collector",
-      branch_name: "Main",
+      old_password: borrowerJson.temporary_password,
+      new_password: "abcdefgh",
     },
   });
-  expect(validRes.status()).toBe(201);
+  expect(validRes.status()).toBe(200);
 });

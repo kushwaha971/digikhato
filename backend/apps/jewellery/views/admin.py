@@ -34,6 +34,7 @@ class AdminFeatureFlagsView(APIView):
             {
                 "branch_name": branch_name,
                 "feature_flags": dict((control.feature_flags if control else {}) or {}),
+                "einvoice_applicable": bool(control.einvoice_applicable) if control else False,
                 "updated_at": control.updated_at if control else None,
             }
         )
@@ -44,16 +45,22 @@ class AdminFeatureFlagsView(APIView):
         serializer = FeatureFlagsPatchSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        patch = serializer.validated_data.get("feature_flags") or {}
         control = patch_feature_flags(
             tenant=tenant,
             branch_name=branch_name,
-            patch=serializer.validated_data["feature_flags"],
+            patch=patch,
             actor=request.user,
         )
+        if "einvoice_applicable" in serializer.validated_data:
+            control.einvoice_applicable = serializer.validated_data["einvoice_applicable"]
+            control.updated_by = request.user
+            control.save(update_fields=["einvoice_applicable", "updated_by", "updated_at"])
         return Response(
             {
                 "branch_name": control.branch_name,
                 "feature_flags": control.feature_flags,
+                "einvoice_applicable": control.einvoice_applicable,
                 "updated_at": control.updated_at,
             },
             status=status.HTTP_200_OK,

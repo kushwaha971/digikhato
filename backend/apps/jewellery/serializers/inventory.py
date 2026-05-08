@@ -35,6 +35,7 @@ class ItemListSerializer(serializers.ModelSerializer):
     purity_code = serializers.CharField(source="purity.code", read_only=True)
     design_name = serializers.CharField(source="design.name", read_only=True)
     category_name = serializers.CharField(source="design.category.name", read_only=True)
+    hsn_code = serializers.CharField(source="design.category.hsn_code", read_only=True, default="")
 
     class Meta:
         model = Item
@@ -47,6 +48,7 @@ class ItemListSerializer(serializers.ModelSerializer):
             "design",
             "design_name",
             "category_name",
+            "hsn_code",
             "metal",
             "metal_code",
             "purity",

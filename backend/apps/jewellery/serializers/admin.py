@@ -4,8 +4,10 @@ from rest_framework import serializers
 class FeatureFlagsPatchSerializer(serializers.Serializer):
     feature_flags = serializers.DictField(
         child=serializers.BooleanField(),
-        allow_empty=False,
+        allow_empty=True,
+        required=False,
     )
+    einvoice_applicable = serializers.BooleanField(required=False)
 
 
 class LockPeriodSerializer(serializers.Serializer):

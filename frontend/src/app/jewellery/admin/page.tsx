@@ -20,20 +20,29 @@ import {
 // ─── Feature Flags Section ────────────────────────────────────────────────────
 
 function FeatureFlagsSection() {
-  const { data: remoteFlags, isLoading } = useGetAdminFeatureFlagsQuery();
+  const { data: controls, isLoading } = useGetAdminFeatureFlagsQuery();
   const [updateAdminFeatureFlags, { isLoading: isSaving }] = useUpdateAdminFeatureFlagsMutation();
   const [localFlags, setLocalFlags] = useState<JwlAdminFlags | null>(null);
+  const [localEinvoiceApplicable, setLocalEinvoiceApplicable] = useState<boolean | null>(null);
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
   // Use local overrides if present, otherwise fall back to server state
-  const flags: JwlAdminFlags = localFlags ?? remoteFlags ?? {};
+  const remoteFlags = controls?.feature_flags ?? {};
+  const flags: JwlAdminFlags = localFlags ?? remoteFlags;
+  const einvoiceApplicable = localEinvoiceApplicable ?? Boolean(controls?.einvoice_applicable);
 
   function toggleFlag(key: string) {
     setLocalFlags((prev) => {
-      const base = prev ?? remoteFlags ?? {};
+      const base = prev ?? remoteFlags;
       return { ...base, [key]: !base[key] };
     });
+      setSuccessMsg("");
+      setErrorMsg("");
+  }
+
+  function toggleEinvoiceApplicable() {
+    setLocalEinvoiceApplicable((prev) => !(prev ?? Boolean(controls?.einvoice_applicable)));
     setSuccessMsg("");
     setErrorMsg("");
   }
@@ -42,8 +51,12 @@ function FeatureFlagsSection() {
     setSuccessMsg("");
     setErrorMsg("");
     try {
-      await updateAdminFeatureFlags(flags).unwrap();
+      await updateAdminFeatureFlags({
+        feature_flags: flags,
+        einvoice_applicable: einvoiceApplicable,
+      }).unwrap();
       setLocalFlags(null); // clear local overrides — RTK cache is now updated
+      setLocalEinvoiceApplicable(null);
       setSuccessMsg("Feature flags saved.");
     } catch {
       setErrorMsg("Failed to save feature flags.");
@@ -59,6 +72,33 @@ function FeatureFlagsSection() {
       <div>
         <h2 className="text-base font-semibold text-text">Feature flags</h2>
         <p className="text-xs text-muted mt-0.5">Toggle product features on or off for this tenant.</p>
+      </div>
+
+      <div className="rounded-xl border border-border bg-surface2 px-4 py-3">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm text-text font-medium">E-invoice applicable</p>
+            <p className="text-xs text-muted mt-0.5">Enable IRN generation and compliance warnings for eligible B2B invoices.</p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={einvoiceApplicable}
+            onClick={toggleEinvoiceApplicable}
+            className={[
+              "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200",
+              "focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2",
+              einvoiceApplicable ? "bg-primary-500" : "bg-neutral-300 dark:bg-neutral-600",
+            ].join(" ")}
+          >
+            <span
+              className={[
+                "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition duration-200",
+                einvoiceApplicable ? "translate-x-5" : "translate-x-0",
+              ].join(" ")}
+            />
+          </button>
+        </div>
       </div>
 
       {errorMsg && (

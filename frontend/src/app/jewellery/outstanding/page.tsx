@@ -15,6 +15,7 @@ import { ROUTES } from "@/lib/routes";
 import { useAppSelector } from "@/store/hooks";
 import {
   useGetOutstandingPartyQuery,
+  useLazyExportOutstandingCsvQuery,
   useListOutstandingQuery,
   usePostOutstandingAdjustmentMutation,
 } from "@/store/jewellery-api";
@@ -42,6 +43,14 @@ function bucketLabel(bucket: string): string {
   if (bucket === "61_90") return "61-90 days";
   if (bucket === "90_plus") return "90+ days";
   return "Unknown";
+}
+
+function movementTypeLabel(value: string): string {
+  if (value === "INVOICE_DEBIT") return "Invoice raised";
+  if (value === "PAYMENT_RECEIVED") return "Payment received";
+  if (value === "ADVANCE_GIVEN") return "Advance collected";
+  if (value === "MANUAL_ADJUSTMENT") return "Manual adjustment";
+  return value.replaceAll("_", " ");
 }
 
 export default function JewelleryOutstandingPage() {
@@ -75,6 +84,7 @@ export default function JewelleryOutstandingPage() {
   });
 
   const [postAdjustment, adjustState] = usePostOutstandingAdjustmentMutation();
+  const [exportCsv, exportState] = useLazyExportOutstandingCsvQuery();
 
   const totals = useMemo(() => {
     let receivable = 0;
@@ -124,6 +134,21 @@ export default function JewelleryOutstandingPage() {
     }
   };
 
+  const handleExportCsv = async () => {
+    const blob = await exportCsv({
+      ageing: ageing === "all" ? undefined : ageing,
+      include_zero: includeZero,
+    }).unwrap();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "jwl-outstanding.csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => window.URL.revokeObjectURL(url), 0);
+  };
+
   return (
     <Screen
       title="Party Outstanding"
@@ -154,6 +179,14 @@ export default function JewelleryOutstandingPage() {
               Manual Adjustment
             </Button>
           ) : null}
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => void handleExportCsv()}
+            loading={exportState.isFetching}
+          >
+            Export CSV
+          </Button>
         </div>
       )}
     >
@@ -272,7 +305,7 @@ export default function JewelleryOutstandingPage() {
                   partyDetail.movements.map((mv) => (
                     <div key={mv.id} className="px-3 py-2 border-b border-border last:border-0">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs font-semibold text-text">{mv.movement_type.replaceAll("_", " ")}</p>
+                        <p className="text-xs font-semibold text-text">{movementTypeLabel(mv.movement_type)}</p>
                         <p className="text-xs text-muted">{mv.txn_date}</p>
                       </div>
                       <div className="mt-1 flex items-center gap-3 flex-wrap text-xs">

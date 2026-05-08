@@ -26,6 +26,7 @@ import {
 
 function getPostLoginRedirect(role: string | undefined): string {
   if (role === "super_admin") return ROUTES.app.superAdmin.dashboard;
+  if (role === "borrower") return ROUTES.app.portal;
   return ROUTES.app.udhaarbook.root;
 }
 

@@ -1,5 +1,7 @@
 """Party Outstanding views (Phase B-2.4)."""
+import csv
 
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -22,6 +24,7 @@ from apps.users.views import get_effective_tenant
 class PartyOutstandingViewSet(viewsets.GenericViewSet):
     """
     GET  /outstanding/              — list all customer balances (ageing report)
+    GET  /outstanding/export/       — export balances as CSV
     GET  /outstanding/{id}/         — customer balance + last 20 movements
     POST /outstanding/{id}/adjust/  — manual debit/credit (Admin/Manager only)
 
@@ -55,7 +58,7 @@ class PartyOutstandingViewSet(viewsets.GenericViewSet):
         customer_id = request.query_params.get("customer") or ""
         ageing = request.query_params.get("ageing") or ""
         include_zero_param = request.query_params.get("include_zero")
-        include_zero = True if include_zero_param is None else include_zero_param.lower() in ("1", "true", "yes")
+        include_zero = False if include_zero_param is None else include_zero_param.lower() in ("1", "true", "yes")
         report = get_ageing_report(
             tenant,
             branch_name=branch_name,
@@ -64,6 +67,56 @@ class PartyOutstandingViewSet(viewsets.GenericViewSet):
             include_zero=include_zero,
         )
         return Response(report)
+
+    @action(detail=False, methods=["get"], url_path="export")
+    def export(self, request):
+        """GET /outstanding/export/ — CSV export for party outstanding list."""
+        view_perm = HasJewelleryPermission(P_ACCOUNTS_VIEW)
+        if not view_perm.has_permission(request, self):
+            return Response(
+                {"detail": "You do not have permission to view outstanding balances."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        tenant = get_effective_tenant(request.user)
+        branch_name = (
+            request.query_params.get("branch_name")
+            or request.headers.get("X-Branch-Name")
+            or ""
+        )
+        customer_id = request.query_params.get("customer") or ""
+        ageing = request.query_params.get("ageing") or ""
+        include_zero_param = request.query_params.get("include_zero")
+        include_zero = False if include_zero_param is None else include_zero_param.lower() in ("1", "true", "yes")
+        rows = get_ageing_report(
+            tenant,
+            branch_name=branch_name,
+            customer_id=customer_id,
+            ageing=ageing,
+            include_zero=include_zero,
+        )
+
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="jwl-outstanding.csv"'
+        writer = csv.writer(response)
+        writer.writerow([
+            "Customer Name",
+            "Mobile",
+            "Cash Balance",
+            "Metal Balance (g)",
+            "Last Activity Date",
+            "Ageing Bucket",
+        ])
+        for row in rows:
+            writer.writerow([
+                row.get("customer_name", ""),
+                row.get("mobile", ""),
+                str(row.get("amount_balance", "0")),
+                str(row.get("metal_balance_grams", "0")),
+                str(row.get("last_txn_date") or ""),
+                row.get("ageing_bucket", ""),
+            ])
+        return response
 
     def retrieve(self, request, pk=None):
         """GET /outstanding/{id}/ — balance detail with last 20 movements."""

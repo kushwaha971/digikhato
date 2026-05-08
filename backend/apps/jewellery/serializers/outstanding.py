@@ -61,7 +61,7 @@ class PartyOutstandingBalanceListSerializer(serializers.ModelSerializer):
 
 class ManualAdjustmentSerializer(serializers.Serializer):
     movement_type = serializers.ChoiceField(
-        choices=PartyOutstandingMovement.MOVEMENT_TYPES,
+        choices=[("MANUAL_ADJUSTMENT", "Manual Adjustment")],
         default="MANUAL_ADJUSTMENT",
     )
     amount_delta = serializers.DecimalField(
@@ -72,5 +72,5 @@ class ManualAdjustmentSerializer(serializers.Serializer):
     )
     reference_type = serializers.CharField(required=False, default="", allow_blank=True)
     reference_id = serializers.CharField(required=False, default="", allow_blank=True)
-    notes = serializers.CharField(required=False, default="", allow_blank=True)
+    notes = serializers.CharField(required=True, min_length=5, max_length=500, allow_blank=False)
     txn_date = serializers.DateField(required=False, allow_null=True, default=None)

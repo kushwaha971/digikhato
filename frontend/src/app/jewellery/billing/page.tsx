@@ -27,7 +27,7 @@ import { useInfiniteItems } from "@/hooks/useInfiniteItems";
 import { ROUTES } from "@/lib/routes";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import type { InvoiceStatus, InvoiceType, JwlInvoice } from "@/store/jewellery-api";
-import { useGenerateEInvoiceMutation, useListInvoicesQuery } from "@/store/jewellery-api";
+import { useGenerateEInvoiceMutation, useGetAdminFeatureFlagsQuery, useListInvoicesQuery } from "@/store/jewellery-api";
 import { setBillingFilters, resetBillingFilters } from "@/store/jewellery-filters-slice";
 import { formatINRCurrency } from "@/utils/jewellery/formulas";
 
@@ -308,6 +308,25 @@ function BillingPageInner() {
 
   const drawerTitle = drawerType === "CREDIT_NOTE" ? "New Credit Note" : drawerType === "ESTIMATE" ? "New Estimate" : "New Invoice";
   const [generateEInvoice, eInvoiceState] = useGenerateEInvoiceMutation();
+  const { data: adminControls } = useGetAdminFeatureFlagsQuery();
+  const einvoiceApplicable = Boolean(adminControls?.einvoice_applicable);
+  const [irnTarget, setIrnTarget] = useState<JwlInvoice | null>(null);
+  const [irnAck, setIrnAck] = useState(false);
+
+  const openIrnDisclaimer = (invoice: JwlInvoice) => {
+    setIrnTarget(invoice);
+    setIrnAck(false);
+  };
+
+  const confirmGenerateIrn = async () => {
+    if (!irnTarget) return;
+    try {
+      await generateEInvoice(irnTarget.id).unwrap();
+    } finally {
+      setIrnTarget(null);
+      setIrnAck(false);
+    }
+  };
   const messagesInvoices = useListInvoicesQuery(
     { page: 1, status: "ISSUED" },
     { skip: view !== "messages" },
@@ -429,6 +448,11 @@ function BillingPageInner() {
         subtitle="Generate IRN and QR for issued tax invoices."
         backHref={ROUTES.app.jewellery.billing}
       >
+        {!einvoiceApplicable ? (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 mb-3">
+            E-invoice is disabled for this branch. Enable it from Admin controls to generate IRN references.
+          </div>
+        ) : null}
         {eInvoiceInvoices.isFetching ? <SkeletonList count={4} /> : null}
         <div className="space-y-3">
           {(eInvoiceInvoices.data?.results ?? []).map((invoice) => (
@@ -438,17 +462,20 @@ function BillingPageInner() {
                 <p className="text-xs text-muted mt-1">
                   {invoice.customer_name || "Walk-in"} · {invoice.e_invoice_irn ? "IRN generated" : "IRN pending"}
                 </p>
+                <p className="text-[11px] text-muted mt-1">
+                  {invoice.customer_gstin ? "B2B invoice" : "B2C invoice"}
+                </p>
                 {invoice.e_invoice_irn ? (
                   <p className="text-[11px] text-muted mt-1 break-all">IRN: {invoice.e_invoice_irn}</p>
                 ) : null}
               </div>
               <div className="flex items-center gap-2">
-                {!invoice.e_invoice_irn ? (
+                {!invoice.e_invoice_irn && invoice.customer_gstin && einvoiceApplicable ? (
                   <Button
                     type="button"
                     size="sm"
                     className="min-h-11"
-                    onClick={() => generateEInvoice(invoice.id)}
+                    onClick={() => openIrnDisclaimer(invoice)}
                     loading={eInvoiceState.isLoading}
                   >
                     Generate IRN
@@ -463,6 +490,47 @@ function BillingPageInner() {
             </div>
           ))}
         </div>
+
+        <Drawer
+          open={Boolean(irnTarget)}
+          onClose={() => setIrnTarget(null)}
+          title="Generate Reference IRN"
+          size="md"
+          footer={(
+            <>
+              <Button type="button" size="sm" variant="secondary" onClick={() => setIrnTarget(null)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void confirmGenerateIrn()}
+                loading={eInvoiceState.isLoading}
+                disabled={!irnAck}
+              >
+                Generate IRN
+              </Button>
+            </>
+          )}
+        >
+          <div className="space-y-3">
+            <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <p className="font-semibold mb-1">For internal use only</p>
+              <p>
+                This IRN is generated locally and is not submitted to GSTN/IRP. It is not a legally valid e-invoice IRN.
+              </p>
+            </div>
+            <label className="inline-flex items-start gap-2 text-sm text-text">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 accent-primary"
+                checked={irnAck}
+                onChange={(e) => setIrnAck(e.target.checked)}
+              />
+              I understand this is a simulated IRN for internal reference only.
+            </label>
+          </div>
+        </Drawer>
       </Screen>
     );
   }

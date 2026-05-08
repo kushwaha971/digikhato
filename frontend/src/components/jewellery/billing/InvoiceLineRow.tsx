@@ -29,6 +29,9 @@ export interface InvoiceLineDraft {
   hallmarking_fee: string;
   stone_value: string;
   gst_rate_pct: string;
+  auto_rate_per_gram?: string;
+  rate_overridden?: boolean;
+  rate_unavailable?: boolean;
 }
 
 interface InvoiceLineRowProps {
@@ -43,6 +46,7 @@ interface InvoiceLineRowProps {
   collapsible?: boolean;
   expanded?: boolean;
   onToggleExpand?: (index: number) => void;
+  duplicateWarning?: string;
 }
 
 function InvoiceLineRowBase({
@@ -57,6 +61,7 @@ function InvoiceLineRowBase({
   collapsible = false,
   expanded = true,
   onToggleExpand,
+  duplicateWarning,
 }: Readonly<InvoiceLineRowProps>) {
   const lineTitle = line.description.trim() || `${line.metal_code || "Item"} ${line.purity_code || ""}`.trim() || `Line #${index + 1}`;
 
@@ -176,6 +181,16 @@ function InvoiceLineRowBase({
           onChange={(event) => onChange(index, { rate_per_gram: event.target.value })}
         />
       </div>
+
+      {line.rate_overridden ? (
+        <p className="text-xs text-amber-700">Rate overridden</p>
+      ) : null}
+      {line.rate_unavailable ? (
+        <p className="text-xs text-amber-700">Rate unavailable — enter manually</p>
+      ) : null}
+      {duplicateWarning ? (
+        <p className="text-xs text-amber-700">{duplicateWarning}</p>
+      ) : null}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
         <Select
