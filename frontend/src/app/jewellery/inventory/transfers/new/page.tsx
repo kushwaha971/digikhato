@@ -24,6 +24,7 @@ export default function NewTransferPage() {
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<TransferLine[]>([{ item: "", qty: 1, weight: "" }]);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState("");
 
   const addLine = () => setLines((prev) => [...prev, { item: "", qty: 1, weight: "" }]);
 
@@ -35,9 +36,23 @@ export default function NewTransferPage() {
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
+    if (!fromBranch.trim()) newErrors.fromBranch = "From branch is required.";
     if (!toBranch.trim()) newErrors.toBranch = "To branch is required.";
+    if (
+      fromBranch.trim() &&
+      toBranch.trim() &&
+      fromBranch.trim().toLowerCase() === toBranch.trim().toLowerCase()
+    ) {
+      newErrors.toBranch = "Destination branch must be different from source branch.";
+    }
     const validLines = lines.filter((l) => l.item.trim());
     if (validLines.length === 0) newErrors.lines = "At least one item line is required.";
+    validLines.forEach((line, index) => {
+      const weightNumber = Number(line.weight);
+      if (!line.weight.trim() || !Number.isFinite(weightNumber) || weightNumber <= 0) {
+        newErrors[`line.${index}.weight`] = "Weight must be greater than 0.";
+      }
+    });
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -59,8 +74,19 @@ export default function NewTransferPage() {
         })),
     };
 
-    await createTransfer(payload).unwrap();
-    router.push("/jewellery/inventory/transfers");
+    try {
+      setSubmitError("");
+      await createTransfer(payload).unwrap();
+      router.push("/jewellery/inventory/transfers");
+    } catch (err: unknown) {
+      const fallback = "Could not create transfer. Please review item state and branch details.";
+      if (typeof err === "object" && err && "data" in err) {
+        const detail = (err as { data?: { detail?: string } }).data?.detail;
+        setSubmitError(detail || fallback);
+      } else {
+        setSubmitError(fallback);
+      }
+    }
   };
 
   return (
@@ -77,8 +103,13 @@ export default function NewTransferPage() {
             <Input
               label="From branch"
               value={fromBranch}
-              onChange={(e) => setFromBranch(e.target.value)}
+              onChange={(e) => {
+                setFromBranch(e.target.value);
+                if (errors.fromBranch) setErrors((prev) => ({ ...prev, fromBranch: "" }));
+              }}
               placeholder="Origin branch name"
+              error={errors.fromBranch}
+              helperText={errors.fromBranch}
             />
             <Input
               label="To branch *"
@@ -137,6 +168,8 @@ export default function NewTransferPage() {
                     value={line.weight}
                     onChange={(e) => updateLine(index, "weight", e.target.value)}
                     placeholder="0.00"
+                    error={errors[`line.${index}.weight`]}
+                    helperText={errors[`line.${index}.weight`]}
                   />
                 </div>
                 {lines.length > 1 ? (
@@ -153,6 +186,10 @@ export default function NewTransferPage() {
             ))}
           </div>
         </section>
+
+        {submitError ? (
+          <p className="text-sm text-danger-600">{submitError}</p>
+        ) : null}
 
         <div className="flex items-center gap-3">
           <Button

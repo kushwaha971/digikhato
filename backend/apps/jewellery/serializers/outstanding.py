@@ -7,6 +7,25 @@ from rest_framework import serializers
 from apps.jewellery.models.outstanding import PartyOutstandingBalance, PartyOutstandingMovement
 
 
+class PartyOutstandingMovementsFilterSerializer(serializers.Serializer):
+    movement_type = serializers.ChoiceField(
+        choices=PartyOutstandingMovement.MOVEMENT_TYPES,
+        required=False,
+        allow_null=True,
+    )
+    date_from = serializers.DateField(required=False)
+    date_to = serializers.DateField(required=False)
+
+    def validate(self, attrs):
+        date_from = attrs.get("date_from")
+        date_to = attrs.get("date_to")
+        if date_from and date_to and date_from > date_to:
+            raise serializers.ValidationError(
+                {"date_to": "date_to must be greater than or equal to date_from."}
+            )
+        return attrs
+
+
 class PartyOutstandingMovementSerializer(serializers.ModelSerializer):
     class Meta:
         model = PartyOutstandingMovement

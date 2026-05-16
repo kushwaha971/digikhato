@@ -26,6 +26,14 @@ import {
 import { useDebounce } from "@/hooks/useDebounce";
 import { calcOldGoldDeduction, formatINRCurrency } from "@/utils/jewellery/formulas";
 import {
+  BILLING_DEFAULT_GST_RATE_PCT,
+  BILLING_DEFAULT_HSN_CODE,
+  BILLING_DEFAULT_INVOICE_TYPE,
+  BILLING_DEFAULT_LINE_METAL_CODE,
+  BILLING_DEFAULT_MAKING_MODE,
+  BILLING_DEFAULT_PAYMENT_MODE,
+  BILLING_DEFAULT_LINE_PURITY_CODE,
+  BILLING_DEFAULT_NUMERIC_VALUE,
   INDIAN_STATE_CODES,
   INVOICE_TYPE_FORM_OPTIONS,
 } from "@/constants/jewellery";
@@ -52,24 +60,24 @@ interface InvoiceFormContentProps {
 
 const DEFAULT_STATE_CODE = "27";
 
-function createEmptyLine(defaultRate = "0"): InvoiceLineDraft {
+function createEmptyLine(defaultRate = BILLING_DEFAULT_NUMERIC_VALUE): InvoiceLineDraft {
   return {
     item: "",
     huid: "",
     description: "",
-    hsn_code: "7113",
-    metal_code: "GOLD",
-    purity_code: "22K",
-    gross_wt: "0",
-    net_wt: "0",
-    stone_wt: "0",
+    hsn_code: BILLING_DEFAULT_HSN_CODE,
+    metal_code: BILLING_DEFAULT_LINE_METAL_CODE,
+    purity_code: BILLING_DEFAULT_LINE_PURITY_CODE,
+    gross_wt: BILLING_DEFAULT_NUMERIC_VALUE,
+    net_wt: BILLING_DEFAULT_NUMERIC_VALUE,
+    stone_wt: BILLING_DEFAULT_NUMERIC_VALUE,
     rate_per_gram: defaultRate,
-    making_mode: "PER_GRAM",
-    making_rate: "0",
-    wastage_pct: "0",
-    hallmarking_fee: "0",
-    stone_value: "0",
-    gst_rate_pct: "3",
+    making_mode: BILLING_DEFAULT_MAKING_MODE,
+    making_rate: BILLING_DEFAULT_NUMERIC_VALUE,
+    wastage_pct: BILLING_DEFAULT_NUMERIC_VALUE,
+    hallmarking_fee: BILLING_DEFAULT_NUMERIC_VALUE,
+    stone_value: BILLING_DEFAULT_NUMERIC_VALUE,
+    gst_rate_pct: BILLING_DEFAULT_GST_RATE_PCT,
     auto_rate_per_gram: defaultRate,
     rate_overridden: false,
     rate_unavailable: false,
@@ -77,16 +85,16 @@ function createEmptyLine(defaultRate = "0"): InvoiceLineDraft {
 }
 
 function createEmptyPayment(): InvoicePaymentDraft {
-  return { mode: "CASH", amount: "0", reference: "" };
+  return { mode: BILLING_DEFAULT_PAYMENT_MODE, amount: BILLING_DEFAULT_NUMERIC_VALUE, reference: "" };
 }
 
 function createEmptyOldGold(): OldGoldDraft {
   return {
-    metal_code: "GOLD",
+    metal_code: BILLING_DEFAULT_LINE_METAL_CODE,
     description: "",
-    gross_wt: "0",
+    gross_wt: BILLING_DEFAULT_NUMERIC_VALUE,
     tested_purity: "75",
-    buy_rate_per_gram: "0",
+    buy_rate_per_gram: BILLING_DEFAULT_NUMERIC_VALUE,
   };
 }
 
@@ -148,7 +156,7 @@ const SectionCard = memo(function SectionCard({
 });
 
 export function InvoiceFormContent({
-  initialInvoiceType = "TAX_INVOICE",
+  initialInvoiceType = BILLING_DEFAULT_INVOICE_TYPE,
   initialReferenceInvoiceId = "",
   initialCustomerId = "",
   seedOldGold = false,
@@ -159,8 +167,10 @@ export function InvoiceFormContent({
 
   const { data: rateRows } = useGetLiveRatesQuery();
   const defaultRate = useMemo(() => {
-    const preferred = rateRows?.find((row) => row.metal === "GOLD" && row.purity === "22K");
-    return preferred?.sell_rate ?? rateRows?.[0]?.sell_rate ?? "0";
+    const preferred = rateRows?.find(
+      (row) => row.metal === BILLING_DEFAULT_LINE_METAL_CODE && row.purity === BILLING_DEFAULT_LINE_PURITY_CODE,
+    );
+    return preferred?.sell_rate ?? rateRows?.[0]?.sell_rate ?? BILLING_DEFAULT_NUMERIC_VALUE;
   }, [rateRows]);
 
   const [invoiceType, setInvoiceType] = useState<InvoiceType>(initialInvoiceType);
@@ -172,7 +182,7 @@ export function InvoiceFormContent({
   const [customerId, setCustomerId] = useState(initialCustomerId);
   const [sellerStateCode, setSellerStateCode] = useState(DEFAULT_STATE_CODE);
   const [placeStateCode, setPlaceStateCode] = useState(DEFAULT_STATE_CODE);
-  const [discountAmount, setDiscountAmount] = useState("0");
+  const [discountAmount, setDiscountAmount] = useState(BILLING_DEFAULT_NUMERIC_VALUE);
   const [notes, setNotes] = useState("");
 
   const [lines, setLines] = useState<InvoiceLineDraft[]>([]);
@@ -232,7 +242,7 @@ export function InvoiceFormContent({
       const payload = {
         seller_state_code: sellerStateCode,
         place_of_supply_state_code: placeStateCode,
-        discount_amount: discountAmount || "0",
+        discount_amount: discountAmount || BILLING_DEFAULT_NUMERIC_VALUE,
         lines: lines.map((line) => ({
           item: line.item || undefined,
           description: line.description,
@@ -240,16 +250,16 @@ export function InvoiceFormContent({
           hsn_code: line.hsn_code,
           metal_code: line.metal_code,
           purity_code: line.purity_code,
-          gross_wt: line.gross_wt || "0",
-          net_wt: line.net_wt || "0",
-          stone_wt: line.stone_wt || "0",
-          rate_per_gram: line.rate_per_gram || "0",
+          gross_wt: line.gross_wt || BILLING_DEFAULT_NUMERIC_VALUE,
+          net_wt: line.net_wt || BILLING_DEFAULT_NUMERIC_VALUE,
+          stone_wt: line.stone_wt || BILLING_DEFAULT_NUMERIC_VALUE,
+          rate_per_gram: line.rate_per_gram || BILLING_DEFAULT_NUMERIC_VALUE,
           making_mode: line.making_mode,
-          making_rate: line.making_rate || "0",
-          wastage_pct: line.wastage_pct || "0",
-          hallmarking_fee: line.hallmarking_fee || "0",
-          stone_value: line.stone_value || "0",
-          gst_rate_pct: line.gst_rate_pct || "3",
+          making_rate: line.making_rate || BILLING_DEFAULT_NUMERIC_VALUE,
+          wastage_pct: line.wastage_pct || BILLING_DEFAULT_NUMERIC_VALUE,
+          hallmarking_fee: line.hallmarking_fee || BILLING_DEFAULT_NUMERIC_VALUE,
+          stone_value: line.stone_value || BILLING_DEFAULT_NUMERIC_VALUE,
+          gst_rate_pct: line.gst_rate_pct || BILLING_DEFAULT_GST_RATE_PCT,
         })),
       };
 
@@ -287,14 +297,14 @@ export function InvoiceFormContent({
       const matchedRate = rateRows?.find(
         (r) => r.metal === item.metal_code && r.purity === item.purity_code,
       )?.sell_rate;
-      const resolvedRate = matchedRate ?? "0";
+      const resolvedRate = matchedRate ?? BILLING_DEFAULT_NUMERIC_VALUE;
 
       next[index] = {
         ...next[index],
         item: itemId,
         huid: item.huid ?? "",
         description: next[index].description || `${item.design_name || item.sku} ${item.purity_code}`.trim(),
-        hsn_code: next[index].hsn_code || item.hsn_code || "7113",
+        hsn_code: next[index].hsn_code || item.hsn_code || BILLING_DEFAULT_HSN_CODE,
         metal_code: item.metal_code || next[index].metal_code,
         purity_code: item.purity_code || next[index].purity_code,
         gross_wt: item.gross_wt || next[index].gross_wt,
@@ -328,7 +338,7 @@ export function InvoiceFormContent({
           item: item.id,
           huid: item.huid || "",
           description: first.description || item.design_name || item.sku,
-          hsn_code: first.hsn_code || item.hsn_code || "7113",
+          hsn_code: first.hsn_code || item.hsn_code || BILLING_DEFAULT_HSN_CODE,
           metal_code: item.metal_code,
           purity_code: item.purity_code,
           gross_wt: item.gross_wt,
@@ -416,7 +426,7 @@ export function InvoiceFormContent({
       invoice_type: effectiveInvoiceType,
       seller_state_code: sellerStateCode,
       place_of_supply_state_code: placeStateCode,
-      discount_amount: discountAmount || "0",
+      discount_amount: discountAmount || BILLING_DEFAULT_NUMERIC_VALUE,
       notes,
       lines: filteredLines.map((line) => ({
         item: line.item || undefined,
@@ -425,16 +435,16 @@ export function InvoiceFormContent({
         hsn_code: line.hsn_code,
         metal_code: line.metal_code,
         purity_code: line.purity_code,
-        gross_wt: line.gross_wt || "0",
-        net_wt: line.net_wt || "0",
-        stone_wt: line.stone_wt || "0",
-        rate_per_gram: line.rate_per_gram || "0",
+        gross_wt: line.gross_wt || BILLING_DEFAULT_NUMERIC_VALUE,
+        net_wt: line.net_wt || BILLING_DEFAULT_NUMERIC_VALUE,
+        stone_wt: line.stone_wt || BILLING_DEFAULT_NUMERIC_VALUE,
+        rate_per_gram: line.rate_per_gram || BILLING_DEFAULT_NUMERIC_VALUE,
         making_mode: line.making_mode,
-        making_rate: line.making_rate || "0",
-        wastage_pct: line.wastage_pct || "0",
-        hallmarking_fee: line.hallmarking_fee || "0",
-        stone_value: line.stone_value || "0",
-        gst_rate_pct: line.gst_rate_pct || "3",
+        making_rate: line.making_rate || BILLING_DEFAULT_NUMERIC_VALUE,
+        wastage_pct: line.wastage_pct || BILLING_DEFAULT_NUMERIC_VALUE,
+        hallmarking_fee: line.hallmarking_fee || BILLING_DEFAULT_NUMERIC_VALUE,
+        stone_value: line.stone_value || BILLING_DEFAULT_NUMERIC_VALUE,
+        gst_rate_pct: line.gst_rate_pct || BILLING_DEFAULT_GST_RATE_PCT,
       })),
       payments: payments
         .filter((payment) => Number(payment.amount) > 0)

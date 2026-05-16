@@ -21,7 +21,14 @@ import {
   ResponsiveFilterPanel,
 } from "@/components/ui/ResponsiveFilterPanel";
 import { SkeletonList } from "@/components/ui/Skeleton";
-import { INVOICE_STATUS_OPTIONS, invoiceStatusVariant } from "@/constants/jewellery";
+import {
+  INVOICE_STATUS_ISSUED,
+  INVOICE_STATUS_OPTIONS,
+  INVOICE_TYPE_CREDIT_NOTE,
+  INVOICE_TYPE_ESTIMATE,
+  INVOICE_TYPE_TAX,
+  invoiceStatusVariant,
+} from "@/constants/jewellery";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useInfiniteItems } from "@/hooks/useInfiniteItems";
 import { ROUTES } from "@/lib/routes";
@@ -129,9 +136,9 @@ function InvoiceListPanel({
   const debouncedSearch = useDebounce(search, 300);
 
   const typeFilter: InvoiceType | undefined = view === "estimate"
-    ? "ESTIMATE"
+    ? INVOICE_TYPE_ESTIMATE
     : view === "sale-return"
-      ? "CREDIT_NOTE"
+      ? INVOICE_TYPE_CREDIT_NOTE
       : undefined;
 
   const { data, isFetching } = useListInvoicesQuery({
@@ -239,7 +246,7 @@ function InvoiceListPanel({
           </ResponsiveFilterPanel>
 
           <Button
-            onClick={() => onOpenCreate(isCreditNoteView ? "CREDIT_NOTE" : view === "estimate" ? "ESTIMATE" : "TAX_INVOICE")}
+            onClick={() => onOpenCreate(isCreditNoteView ? INVOICE_TYPE_CREDIT_NOTE : view === "estimate" ? INVOICE_TYPE_ESTIMATE : INVOICE_TYPE_TAX)}
           >
             {isCreditNoteView ? "New credit note" : "New invoice"}
           </Button>
@@ -266,7 +273,7 @@ function InvoiceListPanel({
           description={hasFilters ? "No records match your current filters." : isCreditNoteView ? "Create your first credit note to record a return." : "Create your first invoice to start billing."}
           action={{
             label: isCreditNoteView ? "New credit note" : "New invoice",
-            onClick: () => onOpenCreate(isCreditNoteView ? "CREDIT_NOTE" : view === "estimate" ? "ESTIMATE" : "TAX_INVOICE"),
+            onClick: () => onOpenCreate(isCreditNoteView ? INVOICE_TYPE_CREDIT_NOTE : view === "estimate" ? INVOICE_TYPE_ESTIMATE : INVOICE_TYPE_TAX),
           }}
         />
       ) : null}
@@ -297,7 +304,7 @@ function BillingPageInner() {
   const rawView = searchParams.get("view") ?? "tax-invoice";
   const view = rawView in BILLING_VIEW_CONFIG ? rawView : "tax-invoice";
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerType, setDrawerType] = useState<InvoiceType>("TAX_INVOICE");
+  const [drawerType, setDrawerType] = useState<InvoiceType>(INVOICE_TYPE_TAX);
   const [drawerSeedOldGold, setDrawerSeedOldGold] = useState(false);
 
   const openCreateDrawer = (type: InvoiceType, seedOldGold = false) => {
@@ -306,7 +313,7 @@ function BillingPageInner() {
     setDrawerOpen(true);
   };
 
-  const drawerTitle = drawerType === "CREDIT_NOTE" ? "New Credit Note" : drawerType === "ESTIMATE" ? "New Estimate" : "New Invoice";
+  const drawerTitle = drawerType === INVOICE_TYPE_CREDIT_NOTE ? "New Credit Note" : drawerType === INVOICE_TYPE_ESTIMATE ? "New Estimate" : "New Invoice";
   const [generateEInvoice, eInvoiceState] = useGenerateEInvoiceMutation();
   const { data: adminControls } = useGetAdminFeatureFlagsQuery();
   const einvoiceApplicable = Boolean(adminControls?.einvoice_applicable);
@@ -328,11 +335,11 @@ function BillingPageInner() {
     }
   };
   const messagesInvoices = useListInvoicesQuery(
-    { page: 1, status: "ISSUED" },
+    { page: 1, status: INVOICE_STATUS_ISSUED },
     { skip: view !== "messages" },
   );
   const eInvoiceInvoices = useListInvoicesQuery(
-    { page: 1, type: "TAX_INVOICE", status: "ISSUED" },
+    { page: 1, type: INVOICE_TYPE_TAX, status: INVOICE_STATUS_ISSUED },
     { skip: view !== "einvoice" },
   );
 
@@ -365,7 +372,7 @@ function BillingPageInner() {
         >
           <div className="app-panel rounded-2xl p-5 text-sm text-muted space-y-3">
             <p>Start from the old-gold billing form to add exchange entries and auto deduction calculations.</p>
-            <Button onClick={() => openCreateDrawer("TAX_INVOICE", true)}>
+            <Button onClick={() => openCreateDrawer(INVOICE_TYPE_TAX, true)}>
               Open old-gold invoice drawer
             </Button>
           </div>
@@ -392,7 +399,7 @@ function BillingPageInner() {
         subtitle="Accept mixed tender modes and reconcile receipts against invoices."
         backHref={ROUTES.app.jewellery.billing}
       >
-        <SplitPaymentView onCreateInvoice={() => openCreateDrawer("TAX_INVOICE")} />
+        <SplitPaymentView onCreateInvoice={() => openCreateDrawer(INVOICE_TYPE_TAX)} />
       </Screen>
     );
   }

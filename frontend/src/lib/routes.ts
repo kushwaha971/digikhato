@@ -39,6 +39,7 @@ export const ROUTES = {
       usersRoles: "/jewellery/users-roles",
       multiBranch: "/jewellery/multi-branch",
       barcodeRfid: "/jewellery/barcode-rfid",
+      settings: "/jewellery/settings",
       reports: "/jewellery/reports",
       rates: "/jewellery/settings/rates",
       notifications: "/jewellery/notifications",

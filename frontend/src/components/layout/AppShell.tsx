@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Sidebar } from "./Sidebar";
 import { GlobalSearch } from "./GlobalSearch";
@@ -20,6 +20,7 @@ function AppShellInner({ children }: AppShellProps) {
   const pathname = usePathname();
   const { isAdminOrCollector, isSuperAdmin, isBorrower } = useRoleAccess();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [isEmbedded, setIsEmbedded] = useState(false);
   const { collapsed } = useSidebarState();
   const moduleCtx = getModuleContext(pathname);
   const showGlobalSearch =
@@ -30,22 +31,34 @@ function AppShellInner({ children }: AppShellProps) {
     { active: true, unread: true },
     { skip: !notificationsEnabled },
   );
+  useEffect(() => {
+    try {
+      setIsEmbedded(window.self !== window.top);
+    } catch {
+      setIsEmbedded(false);
+    }
+  }, []);
   const unreadCount = unreadNotifications?.count ?? 0;
-  const contentMargin = collapsed ? "lg:ml-[4rem]" : "lg:ml-sidebar";
-  const showDesktopHeader = showGlobalSearch || notificationsEnabled;
+  const contentMargin = isEmbedded ? "" : (collapsed ? "lg:ml-[4rem]" : "lg:ml-sidebar");
+  const showDesktopHeader = !isEmbedded && (showGlobalSearch || notificationsEnabled);
+  const showMobileHeader = !isEmbedded;
 
   return (
-    <div className="min-h-screen bg-canvas flex">
+    <div className={`min-h-screen bg-canvas flex ${isEmbedded ? "embedded-shell" : ""}`}>
       {/* Sidebar — visible lg+ */}
-      <Sidebar />
+      {!isEmbedded ? <Sidebar /> : null}
 
       {/* Main content area — offset by sidebar width on desktop */}
       <div
         className={`flex-1 flex flex-col min-w-0 transition-[margin-left] duration-300 ${contentMargin}`}
-        style={{ ["--desktop-screen-top" as string]: showDesktopHeader ? "4rem" : "0px" }}
+        style={{
+          ["--desktop-screen-top" as string]: showDesktopHeader ? "4rem" : "0px",
+          ["--mobile-screen-top" as string]: showMobileHeader ? "4rem" : "0px",
+        }}
       >
         {/* Mobile top bar */}
-        <header className="lg:hidden sticky top-0 z-30 h-16 flex items-center justify-between px-4 border-b border-border bg-surface shadow-sm">
+        {showMobileHeader ? (
+          <header className="lg:hidden sticky top-0 z-30 h-16 flex items-center justify-between px-4 border-b border-border bg-surface shadow-sm">
           <BrandLogo size="sm" />
           <div className="flex items-center gap-2">
             {notificationsEnabled && (
@@ -75,7 +88,8 @@ function AppShellInner({ children }: AppShellProps) {
               </svg>
             </button>
           </div>
-        </header>
+          </header>
+        ) : null}
 
         {/* Desktop header */}
         {showDesktopHeader ? (
@@ -102,12 +116,12 @@ function AppShellInner({ children }: AppShellProps) {
           </header>
         ) : null}
 
-        <main className="flex-1 pb-24 lg:pb-6">
+        <main className={`flex-1 ${isEmbedded ? "pb-0" : "pb-24 lg:pb-6"}`}>
           {children}
         </main>
       </div>
 
-      <MobileNavDrawer open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
+      {!isEmbedded ? <MobileNavDrawer open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} /> : null}
     </div>
   );
 }

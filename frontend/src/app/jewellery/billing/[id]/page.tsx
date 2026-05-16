@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 
@@ -23,7 +23,14 @@ import {
   useIssueInvoiceMutation,
   useSendInvoiceMutation,
 } from "@/store/jewellery-api";
-import { invoiceStatusVariant } from "@/constants/jewellery";
+import {
+  invoiceStatusVariant,
+  INVOICE_STATUS_DRAFT,
+  INVOICE_STATUS_ISSUED,
+  INVOICE_TYPE_CREDIT_NOTE,
+  INVOICE_TYPE_ESTIMATE,
+  INVOICE_TYPE_TAX,
+} from "@/constants/jewellery";
 import { ROUTES } from "@/lib/routes";
 import { formatINRCurrency } from "@/utils/jewellery/formulas";
 import { useAppSelector } from "@/store/hooks";
@@ -62,6 +69,14 @@ export default function InvoiceDetailPage() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [irnDisclaimerOpen, setIrnDisclaimerOpen] = useState(false);
   const [irnAcknowledged, setIrnAcknowledged] = useState(false);
+  const [convertFeedback, setConvertFeedback] = useState<{
+    tone: "success" | "danger" | "warning";
+    message: string;
+  } | null>(null);
+
+  useEffect(() => {
+    setConvertFeedback(null);
+  }, [invoiceId]);
 
   const handleIssue = async () => {
     if (!invoice) return;
@@ -102,11 +117,16 @@ export default function InvoiceDetailPage() {
 
   const handleConvertToInvoice = async () => {
     if (!invoice) return;
+    if (invoice.status !== INVOICE_STATUS_DRAFT) {
+      setConvertFeedback({ tone: "warning", message: "Only draft estimates can be converted to invoice." });
+      return;
+    }
     try {
+      setConvertFeedback({ tone: "success", message: "Converting estimate and opening invoice..." });
       const created = await convertToInvoice(invoice.id).unwrap();
       router.push(`/jewellery/billing/${created.id}`);
     } catch {
-      // error surfaced by RTK
+      setConvertFeedback({ tone: "danger", message: "Could not convert estimate. Please try again." });
     }
   };
 
@@ -153,7 +173,7 @@ export default function InvoiceDetailPage() {
   const moreItems = useMemo(() => {
     if (!invoice) return [];
     const items: Array<{ label: string; onClick: () => void; loading?: boolean; danger?: boolean }> = [];
-    if (invoice.status === "ISSUED") {
+    if (invoice.status === INVOICE_STATUS_ISSUED) {
       items.push(
         { label: "Print", onClick: handlePrint },
         { label: "Download PDF", onClick: handleDownloadPdf, loading: pdfState.isFetching },
@@ -161,15 +181,15 @@ export default function InvoiceDetailPage() {
       );
     }
     if (
-      invoice.status === "ISSUED"
-      && invoice.invoice_type === "TAX_INVOICE"
+      invoice.status === INVOICE_STATUS_ISSUED
+      && invoice.invoice_type === INVOICE_TYPE_TAX
       && Boolean(invoice.customer_gstin?.trim())
       && !invoice.e_invoice_irn
       && einvoiceApplicable
     ) {
       items.push({ label: "Generate IRN", onClick: openIrnDisclaimer, loading: eInvoiceState.isLoading });
     }
-    if (invoice.status === "ISSUED" && invoice.invoice_type !== "CREDIT_NOTE") {
+    if (invoice.status === INVOICE_STATUS_ISSUED && invoice.invoice_type !== INVOICE_TYPE_CREDIT_NOTE) {
       items.push({ label: "Create credit note", onClick: () => setCreditNoteDrawerOpen(true) });
     }
     return items;
@@ -184,29 +204,30 @@ export default function InvoiceDetailPage() {
     );
   }
 
-  const isB2BTaxInvoice = invoice.invoice_type === "TAX_INVOICE" && Boolean(invoice.customer_gstin?.trim());
+  const isB2BTaxInvoice = invoice.invoice_type === INVOICE_TYPE_TAX && Boolean(invoice.customer_gstin?.trim());
   const showB2BComplianceWarning = isB2BTaxInvoice && einvoiceApplicable && (!invoice.e_invoice_irn || invoice.e_invoice_is_simulated);
 
   const actions = (
     <div className="flex items-center gap-2 w-full sm:w-auto">
       {/* Primary actions — always visible */}
-      {invoice.status === "DRAFT" ? (
+      {invoice.status === INVOICE_STATUS_DRAFT ? (
         <Button type="button" size="sm" className="min-h-11" onClick={handleIssue} loading={issueState.isLoading}>
           Issue invoice
         </Button>
       ) : null}
-      {invoice.invoice_type === "ESTIMATE" ? (
+      {invoice.invoice_type === INVOICE_TYPE_ESTIMATE ? (
         <Button
           type="button"
           size="sm"
           className="min-h-11"
           onClick={handleConvertToInvoice}
           loading={convertState.isLoading}
+          data-testid="jwl-estimate-convert-button"
         >
           Convert to invoice
         </Button>
       ) : null}
-      {invoice.status === "ISSUED" && canCancel ? (
+      {invoice.status === INVOICE_STATUS_ISSUED && canCancel ? (
         <Button type="button" size="sm" className="min-h-11" variant="danger" onClick={() => setCancelOpen(true)}>
           Cancel
         </Button>
@@ -265,6 +286,26 @@ export default function InvoiceDetailPage() {
       actions={actions}
     >
       <div className="space-y-4">
+        {invoice.invoice_type === INVOICE_TYPE_ESTIMATE && invoice.status !== INVOICE_STATUS_DRAFT ? (
+          <div className="rounded-xl border border-warning-200 bg-warning-50 px-4 py-3 text-sm text-warning-700" data-testid="jwl-estimate-convert-permission">
+            Only draft estimates can be converted to tax invoice.
+          </div>
+        ) : null}
+        {convertFeedback ? (
+          <div
+            className={[
+              "rounded-xl border px-4 py-3 text-sm",
+              convertFeedback.tone === "success"
+                ? "border-success-200 bg-success-50 text-success-700"
+                : convertFeedback.tone === "danger"
+                  ? "border-danger-200 bg-danger-50 text-danger-700"
+                  : "border-warning-200 bg-warning-50 text-warning-700",
+            ].join(" ")}
+            data-testid="jwl-estimate-convert-feedback"
+          >
+            {convertFeedback.message}
+          </div>
+        ) : null}
         {showB2BComplianceWarning ? (
           <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-4 py-3 flex items-start gap-3">
             <span className="text-amber-600 dark:text-amber-400 text-lg leading-none mt-0.5">⚠</span>

@@ -1,5 +1,6 @@
 """Party Outstanding views (Phase B-2.4)."""
 import csv
+from typing import Optional
 
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -16,9 +17,34 @@ from apps.jewellery.serializers.outstanding import (
     ManualAdjustmentSerializer,
     PartyOutstandingBalanceListSerializer,
     PartyOutstandingBalanceSerializer,
+    PartyOutstandingMovementSerializer,
+    PartyOutstandingMovementsFilterSerializer,
 )
 from apps.jewellery.services.outstanding import get_ageing_report, post_movement
 from apps.users.views import get_effective_tenant
+
+DEFAULT_QUERY_TEXT = ""
+INCLUDE_ZERO_TRUE_VALUES = ("1", "true", "yes")
+
+
+def _query_text(request, key: str, default: str = DEFAULT_QUERY_TEXT) -> str:
+    value = request.query_params.get(key)
+    return value if value is not None else default
+
+
+def _branch_name(request) -> str:
+    return request.query_params.get("branch_name") or request.headers.get("X-Branch-Name") or DEFAULT_QUERY_TEXT
+
+
+def _include_zero_flag(request) -> bool:
+    include_zero_param = request.query_params.get("include_zero")
+    if include_zero_param is None:
+        return False
+    return include_zero_param.lower() in INCLUDE_ZERO_TRUE_VALUES
+
+
+def _text_or_default(value: Optional[str], default: str = DEFAULT_QUERY_TEXT) -> str:
+    return default if value in (None, "") else value
 
 
 class PartyOutstandingViewSet(viewsets.GenericViewSet):
@@ -50,15 +76,10 @@ class PartyOutstandingViewSet(viewsets.GenericViewSet):
             )
 
         tenant = get_effective_tenant(request.user)
-        branch_name = (
-            request.query_params.get("branch_name")
-            or request.headers.get("X-Branch-Name")
-            or ""
-        )
-        customer_id = request.query_params.get("customer") or ""
-        ageing = request.query_params.get("ageing") or ""
-        include_zero_param = request.query_params.get("include_zero")
-        include_zero = False if include_zero_param is None else include_zero_param.lower() in ("1", "true", "yes")
+        branch_name = _branch_name(request)
+        customer_id = _query_text(request, "customer")
+        ageing = _query_text(request, "ageing")
+        include_zero = _include_zero_flag(request)
         report = get_ageing_report(
             tenant,
             branch_name=branch_name,
@@ -79,15 +100,10 @@ class PartyOutstandingViewSet(viewsets.GenericViewSet):
             )
 
         tenant = get_effective_tenant(request.user)
-        branch_name = (
-            request.query_params.get("branch_name")
-            or request.headers.get("X-Branch-Name")
-            or ""
-        )
-        customer_id = request.query_params.get("customer") or ""
-        ageing = request.query_params.get("ageing") or ""
-        include_zero_param = request.query_params.get("include_zero")
-        include_zero = False if include_zero_param is None else include_zero_param.lower() in ("1", "true", "yes")
+        branch_name = _branch_name(request)
+        customer_id = _query_text(request, "customer")
+        ageing = _query_text(request, "ageing")
+        include_zero = _include_zero_flag(request)
         rows = get_ageing_report(
             tenant,
             branch_name=branch_name,
@@ -131,6 +147,45 @@ class PartyOutstandingViewSet(viewsets.GenericViewSet):
         serializer = PartyOutstandingBalanceSerializer(balance)
         return Response(serializer.data)
 
+    @action(detail=True, methods=["get"], url_path="movements")
+    def movements(self, request, pk=None):
+        """GET /outstanding/{id}/movements/ — paginated movement history."""
+        view_perm = HasJewelleryPermission(P_ACCOUNTS_VIEW)
+        if not view_perm.has_permission(request, self):
+            return Response(
+                {"detail": "You do not have permission to view outstanding balances."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        balance = get_object_or_404(self.get_queryset(), pk=pk)
+        raw_filters = {}
+        movement_type = request.query_params.get("movement_type")
+        date_from = request.query_params.get("from") or request.query_params.get("date_from")
+        date_to = request.query_params.get("to") or request.query_params.get("date_to")
+        if movement_type:
+            raw_filters["movement_type"] = movement_type
+        if date_from:
+            raw_filters["date_from"] = date_from
+        if date_to:
+            raw_filters["date_to"] = date_to
+        filters = PartyOutstandingMovementsFilterSerializer(data=raw_filters)
+        filters.is_valid(raise_exception=True)
+        data = filters.validated_data
+
+        queryset = balance.movements.filter(deleted_at__isnull=True).order_by("-txn_date", "-created_at")
+        if data.get("movement_type"):
+            queryset = queryset.filter(movement_type=data["movement_type"])
+        if data.get("date_from"):
+            queryset = queryset.filter(txn_date__gte=data["date_from"])
+        if data.get("date_to"):
+            queryset = queryset.filter(txn_date__lte=data["date_to"])
+
+        page = self.paginate_queryset(queryset)
+        serializer = PartyOutstandingMovementSerializer(page or queryset, many=True)
+        if page is not None:
+            return self.get_paginated_response(serializer.data)
+        return Response(serializer.data)
+
     @action(detail=True, methods=["post"], url_path="adjust")
     def adjust(self, request, pk=None):
         """POST /outstanding/{id}/adjust/ — post a manual adjustment."""
@@ -153,9 +208,9 @@ class PartyOutstandingViewSet(viewsets.GenericViewSet):
             movement_type=data["movement_type"],
             amount_delta=data["amount_delta"],
             metal_delta_grams=data["metal_delta_grams"],
-            reference_type=data.get("reference_type", ""),
-            reference_id=data.get("reference_id", ""),
-            notes=data.get("notes", ""),
+            reference_type=_text_or_default(data.get("reference_type"), DEFAULT_QUERY_TEXT),
+            reference_id=_text_or_default(data.get("reference_id"), DEFAULT_QUERY_TEXT),
+            notes=_text_or_default(data.get("notes"), DEFAULT_QUERY_TEXT),
             txn_date=data.get("txn_date"),
             created_by=request.user,
         )

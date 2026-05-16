@@ -27,7 +27,7 @@ export function Screen({ title, subtitle, breadcrumb, actions, children, noPaddi
     <div className="min-h-screen flex flex-col">
       {/* Sticky page header */}
       {(title || subtitle || breadcrumb || actions) && (
-        <div className="sticky top-16 lg:top-[var(--desktop-screen-top,0px)] z-20 bg-canvas border-b border-border shadow-sm flex-shrink-0">
+        <div className="screen-page-header sticky top-[var(--mobile-screen-top,4rem)] lg:top-[var(--desktop-screen-top,0px)] z-20 bg-canvas border-b border-border shadow-sm flex-shrink-0">
           <div className={containerClass}>
             <div className="py-3 md:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 min-w-0">
               <div className="min-w-0 flex items-start sm:items-center gap-2 flex-1">

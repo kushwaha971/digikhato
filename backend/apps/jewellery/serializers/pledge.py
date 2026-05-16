@@ -9,6 +9,9 @@ from apps.jewellery.models.pledge import (
     PledgeItem,
 )
 
+PLEDGE_ITEM_DESCRIPTION_DEFAULT = PledgeItem._meta.get_field("description").default
+LOAN_REPAYMENT_REFERENCE_DEFAULT = LoanRepayment._meta.get_field("reference").default
+
 
 class LoanSchemeSerializer(serializers.ModelSerializer):
     class Meta:
@@ -33,7 +36,7 @@ class PledgeItemSerializer(serializers.ModelSerializer):
 
 
 class PledgeItemWriteSerializer(serializers.Serializer):
-    description = serializers.CharField(required=False, default="", allow_blank=True)
+    description = serializers.CharField(required=False, default=PLEDGE_ITEM_DESCRIPTION_DEFAULT, allow_blank=True)
     metal = serializers.UUIDField()
     purity = serializers.UUIDField()
     gross_wt = serializers.DecimalField(max_digits=12, decimal_places=4)
@@ -85,7 +88,7 @@ class CreateRepaymentSerializer(serializers.Serializer):
     principal_paid = serializers.DecimalField(max_digits=18, decimal_places=2)
     interest_paid = serializers.DecimalField(max_digits=18, decimal_places=2)
     mode = serializers.ChoiceField(choices=LoanRepayment.MODES)
-    reference = serializers.CharField(required=False, default="", allow_blank=True)
+    reference = serializers.CharField(required=False, default=LOAN_REPAYMENT_REFERENCE_DEFAULT, allow_blank=True)
     items_released = serializers.ListField(
         child=serializers.IntegerField(), required=False, default=list
     )

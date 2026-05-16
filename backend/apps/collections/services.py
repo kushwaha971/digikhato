@@ -10,7 +10,7 @@ from apps.loans.models import Loan, LoanStatus
 from apps.loans.services import quantize_amount
 
 
-def _next_unique_collection_code(*, tenant, date) -> str | None:
+def _next_unique_collection_code(*, tenant, date) -> Optional[str]:
     if not tenant:
         return None
     for _ in range(20):

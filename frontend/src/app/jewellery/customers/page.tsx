@@ -25,19 +25,11 @@ import {
   useListCustomersQuery,
   useUpdateCustomerMutation,
 } from "@/store/jewellery-api";
-
-interface CustomerFormValues {
-  name: string;
-  mobile: string;
-  email: string;
-  address: string;
-  city: string;
-  gstin: string;
-  pan: string;
-  state_code: string;
-  dob: string;
-  anniversary: string;
-}
+import {
+  EMPTY_CUSTOMER_FORM_VALUES,
+  type CustomerFormValues,
+  toCustomerFormValues,
+} from "./customer-form-defaults";
 
 const validationSchema = Yup.object({
   name: Yup.string().required("Name is required"),
@@ -47,19 +39,6 @@ const validationSchema = Yup.object({
   email: Yup.string().email("Enter a valid email address"),
   state_code: Yup.string().matches(/^\d{0,2}$/, "State code must be up to 2 digits"),
 });
-
-const initialValues: CustomerFormValues = {
-  name: "",
-  mobile: "",
-  email: "",
-  address: "",
-  city: "",
-  gstin: "",
-  pan: "",
-  state_code: "",
-  dob: "",
-  anniversary: "",
-};
 
 function CustomerCard({ customer, onEdit }: Readonly<{ customer: JwlCustomer; onEdit: (id: string) => void }>) {
   return (
@@ -142,20 +121,7 @@ export default function JewelleryCustomersPage() {
 
   const formik = useFormik<CustomerFormValues>({
     enableReinitialize: true,
-    initialValues: existingCustomer
-      ? {
-          name: existingCustomer.name ?? "",
-          mobile: existingCustomer.mobile ?? "",
-          email: existingCustomer.email ?? "",
-          address: existingCustomer.address ?? "",
-          city: existingCustomer.city ?? "",
-          gstin: existingCustomer.gstin ?? "",
-          pan: existingCustomer.pan ?? "",
-          state_code: existingCustomer.state_code ?? "",
-          dob: existingCustomer.dob ?? "",
-          anniversary: existingCustomer.anniversary ?? "",
-        }
-      : initialValues,
+    initialValues: existingCustomer ? toCustomerFormValues(existingCustomer) : EMPTY_CUSTOMER_FORM_VALUES,
     validationSchema,
     validateOnBlur: true,
     validateOnChange: false,

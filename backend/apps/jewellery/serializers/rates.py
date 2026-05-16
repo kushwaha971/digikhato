@@ -6,6 +6,8 @@ from rest_framework import serializers
 
 from apps.jewellery.models.rates import RateHistory, TenantRate
 
+TENANT_RATE_OVERRIDE_REASON_DEFAULT = TenantRate._meta.get_field("override_reason").default
+
 
 class RateHistorySerializer(serializers.ModelSerializer):
     metal_code = serializers.CharField(source="metal.code", read_only=True)
@@ -33,7 +35,7 @@ class RateOverrideSerializer(serializers.Serializer):
     purity = serializers.PrimaryKeyRelatedField(read_only=False, queryset=__import__("apps.jewellery.models.master", fromlist=["Purity"]).Purity.objects.all())
     buy_rate = serializers.DecimalField(max_digits=18, decimal_places=4, min_value=Decimal("0"))
     sell_rate = serializers.DecimalField(max_digits=18, decimal_places=4, min_value=Decimal("0"))
-    reason = serializers.CharField(max_length=500, allow_blank=True, default="")
+    reason = serializers.CharField(max_length=500, allow_blank=True, default=TENANT_RATE_OVERRIDE_REASON_DEFAULT)
 
 
 class TenantRateSerializer(serializers.ModelSerializer):

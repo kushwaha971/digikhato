@@ -81,6 +81,11 @@ body {
   max-width: 100%;
 }
 
+/* Embedded pages (e.g. iframe inside drawers) should not render an extra page header */
+.embedded-shell .screen-page-header {
+  display: none;
+}
+
 /* Prevent any child from causing horizontal overflow */
 #__next,
 [data-nextjs-scroll-focus-boundary] {

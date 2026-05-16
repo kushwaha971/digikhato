@@ -3,11 +3,13 @@ import uuid
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import status, viewsets
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from apps.common.constants import P_MASTER_EDIT, P_MASTER_VIEW
 from apps.jewellery.models.master import Category, Design, Metal, NumberSeries, Purity, TaxSlab
-from apps.jewellery.permissions import JewelleryFeatureGuard
+from apps.jewellery.permissions import HasJewelleryPermission, JewelleryFeatureGuard
 from apps.jewellery.serializers.master import (
     CategoryTreeSerializer,
     CategoryWriteSerializer,
@@ -58,28 +60,54 @@ class JewelleryTenantScopedViewSet(viewsets.ModelViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class MetalViewSet(viewsets.ReadOnlyModelViewSet):
+class MetalViewSet(JewelleryTenantScopedViewSet):
     serializer_class = MetalSerializer
-    permission_classes = [IsAuthenticated, JewelleryFeatureGuard]
     queryset = Metal.objects.select_related("tenant")
 
+    def get_permissions(self):
+        base = [IsAuthenticated(), JewelleryFeatureGuard()]
+        if self.action in {"create", "update", "partial_update", "destroy"}:
+            base.append(HasJewelleryPermission(P_MASTER_EDIT))
+        else:
+            base.append(HasJewelleryPermission(P_MASTER_VIEW))
+        return base
+
     def get_queryset(self):
-        tenant = get_effective_tenant(self.request.user)
+        tenant = self.get_tenant()
         if not tenant:
-            return Metal.objects.none()
+            return self.queryset.none()
         return super().get_queryset().filter(tenant=tenant, deleted_at__isnull=True)
 
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        has_active_purities = Purity.objects.filter(
+            tenant=self.get_tenant(),
+            metal=instance,
+            deleted_at__isnull=True,
+        ).exists()
+        if has_active_purities:
+            raise ValidationError({"detail": "Cannot delete metal while active purities exist for it."})
+        return super().destroy(request, *args, **kwargs)
 
-class PurityViewSet(viewsets.ReadOnlyModelViewSet):
+
+class PurityViewSet(JewelleryTenantScopedViewSet):
     serializer_class = PuritySerializer
-    permission_classes = [IsAuthenticated, JewelleryFeatureGuard]
     queryset = Purity.objects.select_related("metal", "tenant")
     filterset_fields = ["metal"]
 
+    def get_permissions(self):
+        base = [IsAuthenticated(), JewelleryFeatureGuard()]
+        if self.action in {"create", "update", "partial_update", "destroy"}:
+            base.append(HasJewelleryPermission(P_MASTER_EDIT))
+        else:
+            base.append(HasJewelleryPermission(P_MASTER_VIEW))
+        return base
+
     def get_queryset(self):
-        tenant = get_effective_tenant(self.request.user)
+        tenant = self.get_tenant()
         if not tenant:
-            return Purity.objects.none()
+            return self.queryset.none()
 
         qs = super().get_queryset().filter(tenant=tenant, deleted_at__isnull=True)
         metal_param = self.request.query_params.get("metal")

@@ -13,6 +13,10 @@ from apps.jewellery.models.karigar import (
     KarigarReceipt,
 )
 
+CUSTOMER_ORDER_ORDER_NO_DEFAULT = CustomerOrder._meta.get_field("order_no").default
+CUSTOMER_ORDER_NOTES_DEFAULT = CustomerOrder._meta.get_field("notes").default
+KARIGAR_ISSUE_NOTES_DEFAULT = KarigarIssue._meta.get_field("notes").default
+
 
 class KarigarSerializer(serializers.ModelSerializer):
     total_pure_issued = serializers.SerializerMethodField()
@@ -82,13 +86,13 @@ class CreateOrderSerializer(serializers.Serializer):
     order_date = serializers.DateField()
     expected_delivery = serializers.DateField(required=False, allow_null=True)
     advance_amount = serializers.DecimalField(max_digits=18, decimal_places=2, default=0)
-    notes = serializers.CharField(required=False, allow_blank=True, default="")
+    notes = serializers.CharField(required=False, allow_blank=True, default=CUSTOMER_ORDER_NOTES_DEFAULT)
 
 
 class KarigarIssueSerializer(serializers.ModelSerializer):
     """Read serializer with nested karigar/order names."""
     karigar_name = serializers.CharField(source="karigar.name", read_only=True)
-    order_no = serializers.CharField(source="order.order_no", read_only=True, default="")
+    order_no = serializers.CharField(source="order.order_no", read_only=True, default=CUSTOMER_ORDER_ORDER_NO_DEFAULT)
     metal_code = serializers.CharField(source="metal.code", read_only=True)
 
     class Meta:
@@ -110,7 +114,7 @@ class CreateKarigarIssueSerializer(serializers.Serializer):
     tunch_pct = serializers.DecimalField(max_digits=6, decimal_places=3)
     date = serializers.DateField(required=False, allow_null=True)
     items_json = serializers.ListField(child=serializers.DictField(), required=False, default=list)
-    notes = serializers.CharField(required=False, allow_blank=True, default="")
+    notes = serializers.CharField(required=False, allow_blank=True, default=KARIGAR_ISSUE_NOTES_DEFAULT)
 
 
 class KarigarReceiptSerializer(serializers.ModelSerializer):

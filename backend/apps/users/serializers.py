@@ -162,6 +162,29 @@ class UserSerializer(serializers.ModelSerializer):
         ).filter(
             Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
         ).select_related()
+
+        # Backfill missing Jewellery module-role for legacy tenant admins.
+        # Some older tenants have jewellery feature flag enabled but no
+        # UserModuleRole row, which hides jewellery navigation in the UI.
+        if obj.role == RoleChoices.ADMIN:
+            feature_flags = self.get_feature_flags(obj) or {}
+            has_jewellery_enabled = bool(feature_flags.get(ModuleCode.JEWELLERY))
+            has_jewellery_role = roles.filter(module=ModuleCode.JEWELLERY).exists()
+            if has_jewellery_enabled and not has_jewellery_role:
+                UserModuleRole.objects.get_or_create(
+                    user=obj,
+                    module=ModuleCode.JEWELLERY,
+                    role_code=JwlRoleCode.ADMIN,
+                    branch_name="",
+                    defaults={"granted_by": obj, "is_active": True},
+                )
+                roles = UserModuleRole.objects.filter(
+                    user=obj,
+                    is_active=True,
+                ).filter(
+                    Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
+                ).select_related()
+
         serialized = UserModuleRoleSerializer(roles, many=True).data
 
         # Inject a synthetic loans module role derived from the user's system role.

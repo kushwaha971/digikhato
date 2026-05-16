@@ -179,7 +179,7 @@ async function createItem(request: APIRequestContext, access: string, master?: M
     charge_wt: "10.0000",
   };
   const res = await request.post(`${API_BASE}/jwl/v1/items/`, {
-    headers: authHeaders(access),
+    headers: { ...authHeaders(access), "X-Branch-Name": "Main" },
     data: payload,
   });
   expect(res.status()).toBe(201);
@@ -274,6 +274,43 @@ async function getInvoice(request: APIRequestContext, access: string, invoiceId:
     headers: authHeaders(access),
   });
   expect(res.status()).toBe(200);
+  return res.json();
+}
+
+async function getOutstandingBalanceIdByCustomer(
+  request: APIRequestContext,
+  access: string,
+  customerId: string,
+): Promise<string> {
+  const listRes = await request.get(`${API_BASE}/jwl/v1/outstanding/`, {
+    headers: authHeaders(access),
+    params: { customer: customerId, include_zero: "true" },
+  });
+  expect(listRes.status()).toBe(200);
+  const list = (await listRes.json()) as Array<{ id?: string }>;
+  expect(Array.isArray(list)).toBe(true);
+  const first = list[0];
+  expect(first?.id).toBeTruthy();
+  return first.id as string;
+}
+
+async function postOutstandingAdjustment(
+  request: APIRequestContext,
+  access: string,
+  balanceId: string,
+  amountDelta: string,
+  notes: string,
+) {
+  const res = await request.post(`${API_BASE}/jwl/v1/outstanding/${balanceId}/adjust/`, {
+    headers: authHeaders(access),
+    data: {
+      movement_type: "MANUAL_ADJUSTMENT",
+      amount_delta: amountDelta,
+      metal_delta_grams: "0",
+      notes,
+    },
+  });
+  expect(res.status()).toBe(201);
   return res.json();
 }
 
@@ -554,6 +591,110 @@ test.describe("JWL Simple User Guide - E2E Coverage", () => {
     await activeDrawer.locator("textarea:visible").fill("Late fee adj");
     await saveAdjustmentBtn.click();
     await expect(page.locator('button:visible:has-text("Save adjustment")')).toHaveCount(0);
+  });
+
+  test("[case:TC-JWL-OUT-007] [grep:jwl-outstanding-movement-pagination] outstanding detail movement pagination/history affordance is available and deterministic", async ({ page, request }) => {
+    const invoice = await createDraftInvoice(request, admin.access, seed, { payments: [{ mode: "CASH", amount: "1000" }] });
+    const issued = await issueInvoice(request, admin.access, invoice.id as string);
+    const customerId = String(issued.customer);
+    const balanceId = await getOutstandingBalanceIdByCustomer(request, admin.access, customerId);
+
+    const notePrefix = `PG-MV-${Date.now()}`;
+    for (let idx = 0; idx < 55; idx += 1) {
+      const note = `${notePrefix}-${String(idx).padStart(2, "0")}`;
+      await postOutstandingAdjustment(request, admin.access, balanceId, "1", note);
+    }
+
+    await setUiSession(page, admin.access);
+    await page.goto("/jewellery/outstanding", { waitUntil: "networkidle" });
+
+    const partyCard = page.getByTestId(`jwl-outstanding-party-card-${balanceId}`);
+    await expect(partyCard).toBeVisible();
+    await partyCard.scrollIntoViewIfNeeded();
+    await partyCard.click();
+
+    const movementPanel = page.locator('[data-testid="jwl-outstanding-movement-panel"]:visible').first();
+    await expect(movementPanel).toBeVisible({ timeout: 30000 });
+    await expect(movementPanel.getByText(`${notePrefix}-54`)).toBeVisible();
+    await expect(movementPanel.getByText(`${notePrefix}-00`)).toHaveCount(0);
+
+    const movementRows = movementPanel.locator(":scope > div");
+    await expect.poll(async () => movementRows.count()).toBe(25);
+
+    const movementSection = movementPanel.locator("xpath=ancestor::div[contains(@class,'rounded-xl border border-border overflow-hidden')][1]");
+
+    const paginationButton = movementSection.getByRole("button", {
+      name: /load more|show older|older|next|more history|view more/i,
+    });
+    const historyLink = movementSection.getByRole("link", { name: /history|view all/i });
+    const visibleLoadMoreButton = movementSection.locator('[data-testid="jwl-outstanding-load-more"]:visible').first();
+    const paginationControlCount = (await paginationButton.count()) + (await historyLink.count());
+
+    expect(
+      paginationControlCount,
+      [
+        "Outstanding movement pagination/history control is missing.",
+        "Repro: open any party detail with >50 movements in /jewellery/outstanding.",
+        "Expected: explicit Load More / History navigation control to fetch older movement pages.",
+        "Actual: no control was rendered despite paginated history API.",
+      ].join(" "),
+    ).toBeGreaterThan(0);
+
+    if (await visibleLoadMoreButton.count()) {
+      await visibleLoadMoreButton.click();
+      await expect.poll(async () => movementRows.count()).toBeGreaterThan(25);
+      if (await visibleLoadMoreButton.count()) {
+        await visibleLoadMoreButton.click();
+        await expect(movementPanel.getByText(`${notePrefix}-00`)).toBeVisible();
+      }
+    } else if (await historyLink.count()) {
+      await historyLink.first().click();
+      await expect(page).toHaveURL(/outstanding|history|billing/);
+    }
+  });
+
+  test("[case:TC-JWL-EST-CONVERT-001] [grep:jwl-estimate-conversion] estimate conversion from draft detail view is deterministic", async ({ page, request }) => {
+    const estimate = await createDraftInvoice(request, admin.access, seed, {
+      invoiceType: "ESTIMATE",
+      payments: [{ mode: "CASH", amount: "1000" }],
+    });
+
+    await setUiSession(page, admin.access);
+    await page.goto(`/jewellery/billing/${estimate.id}`, { waitUntil: "networkidle" });
+    const sourceUrl = page.url();
+
+    const convertButton = page.getByTestId("jwl-estimate-convert-button");
+    await expect(convertButton).toBeVisible();
+    await convertButton.click();
+
+    await expect(page).toHaveURL(/\/jewellery\/billing\/[a-f0-9-]+$/);
+    await expect.poll(() => page.url()).not.toBe(sourceUrl);
+
+    const convertedId = page.url().split("/").pop();
+    expect(convertedId).toBeTruthy();
+    expect(convertedId).not.toBe(estimate.id);
+
+    const converted = await getInvoice(request, admin.access, convertedId as string);
+    expect(converted.invoice_type).toBe("TAX_INVOICE");
+    expect(converted.reference_invoice).toBeNull();
+  });
+
+  test("[case:TC-JWL-TR-REG-001] [grep:jwl-transfer-register] transfer register filter, validation, and export affordance work", async ({ page }) => {
+    await setUiSession(page, admin.access);
+    await page.goto("/jewellery/inventory/transfers/register", { waitUntil: "networkidle" });
+
+    await expect(page.getByRole("heading", { name: "Transfer Register" })).toBeVisible();
+
+    const statusSelect = page.getByLabel("Status");
+    await statusSelect.selectOption("APPROVED");
+    await expect(statusSelect).toHaveValue("APPROVED");
+
+    const exportButton = page.getByTestId("jwl-transfer-register-export");
+    await expect(exportButton).toBeDisabled();
+
+    await page.getByLabel("From date").fill("2026-05-10");
+    await page.getByLabel("To date").fill("2026-05-01");
+    await expect(page.getByText("from_date cannot be greater than to_date").first()).toBeVisible();
   });
 
   test("TC-JWL-KAR-001/002/004: karigar add, PAN validation and inactive toggle", async ({ page }) => {

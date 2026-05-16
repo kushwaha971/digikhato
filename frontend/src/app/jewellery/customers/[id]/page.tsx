@@ -128,6 +128,30 @@ export default function CustomerDetailPage() {
           </div>
         ) : null}
 
+        {/* Outstanding snapshot */}
+        <div className="app-panel p-4 space-y-3" data-testid="jwl-customer-outstanding-card">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold text-muted uppercase tracking-wide">Outstanding</p>
+            <Link href="/jewellery/outstanding" className="text-xs text-primary-600 hover:underline">
+              View party outstanding
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <InfoRow
+              label="Amount balance"
+              value={formatINRCurrency(customer.outstanding_amount_balance)}
+            />
+            <InfoRow
+              label="Metal balance"
+              value={`${customer.outstanding_metal_balance_grams} g`}
+            />
+            <InfoRow
+              label="Last outstanding activity"
+              value={customer.outstanding_last_txn_date || "No activity yet"}
+            />
+          </div>
+        </div>
+
         {/* Purchase history */}
         <div className="app-panel p-4 space-y-3">
           <p className="text-xs font-semibold text-muted uppercase tracking-wide">Purchase history</p>

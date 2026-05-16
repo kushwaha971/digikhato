@@ -10,48 +10,67 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ResponsiveFilterPanel, FilterSelect } from "@/components/ui/ResponsiveFilterPanel";
 import { SkeletonList } from "@/components/ui/Skeleton";
 import { Badge } from "@/components/ui/Badge";
-import { transferStatusVariant } from "@/constants/jewellery";
+import { TRANSFER_STATUS_OPTIONS, transferStatusVariant } from "@/constants/jewellery";
 import {
   useListTransfersQuery,
   useApproveTransferMutation,
   useDispatchTransferMutation,
   useReceiveTransferMutation,
+  useRejectTransferMutation,
+  type JwlTransfer,
 } from "@/store/jewellery-api";
 
 export default function TransfersPage() {
-  const [statusFilter, setStatusFilter] = useState("");
-  const [draftStatus, setDraftStatus] = useState("");
+  type TransferStatusFilter = JwlTransfer["status"] | "";
+  const [statusFilter, setStatusFilter] = useState<TransferStatusFilter>("");
+  const [draftStatus, setDraftStatus] = useState<TransferStatusFilter>("");
 
-  const { data, isFetching, refetch } = useListTransfersQuery({
+  const { data, isFetching, error, refetch } = useListTransfersQuery({
     status: statusFilter || undefined,
   });
 
   const [approveTransfer, approveState] = useApproveTransferMutation();
   const [dispatchTransfer, dispatchState] = useDispatchTransferMutation();
   const [receiveTransfer, receiveState] = useReceiveTransferMutation();
+  const [rejectTransfer, rejectState] = useRejectTransferMutation();
 
-  type ActionType = "approve" | "dispatch" | "receive";
+  type ActionType = "approve" | "dispatch" | "receive" | "reject";
   const [pendingAction, setPendingAction] = useState<{ id: string; action: ActionType } | null>(null);
+  const [actionError, setActionError] = useState<string>("");
 
   const transfers = data?.results ?? [];
 
   const handleConfirm = async () => {
     if (!pendingAction) return;
     const { id, action } = pendingAction;
-    if (action === "approve") await approveTransfer(id).unwrap();
-    else if (action === "dispatch") await dispatchTransfer(id).unwrap();
-    else await receiveTransfer(id).unwrap();
-    setPendingAction(null);
-    refetch();
+    try {
+      setActionError("");
+      if (action === "approve") await approveTransfer(id).unwrap();
+      else if (action === "dispatch") await dispatchTransfer(id).unwrap();
+      else if (action === "receive") await receiveTransfer(id).unwrap();
+      else await rejectTransfer(id).unwrap();
+      setPendingAction(null);
+      refetch();
+    } catch (err: unknown) {
+      const fallback = "Transfer action failed. Please retry.";
+      if (typeof err === "object" && err && "data" in err) {
+        const detail = (err as { data?: { detail?: string } }).data?.detail;
+        setActionError(detail || fallback);
+      } else {
+        setActionError(fallback);
+      }
+      setPendingAction(null);
+    }
   };
 
   const isActionLoading =
-    approveState.isLoading || dispatchState.isLoading || receiveState.isLoading;
+    approveState.isLoading || dispatchState.isLoading || receiveState.isLoading || rejectState.isLoading;
 
   const ACTION_LABELS: Record<ActionType, string> = {
     approve: "Approve transfer?",
     dispatch: "Dispatch transfer?",
     receive: "Mark as received?",
+    reject: "Reject transfer?",
   };
 
   return (
@@ -73,33 +92,47 @@ export default function TransfersPage() {
             <FilterSelect
               label="Status"
               value={draftStatus}
-              onChange={(e) => setDraftStatus(e.target.value)}
+              onChange={(e) => setDraftStatus(e.target.value as TransferStatusFilter)}
             >
-              <option value="">All</option>
-              <option value="REQUESTED">Requested</option>
-              <option value="APPROVED">Approved</option>
-              <option value="IN_TRANSIT">In transit</option>
-              <option value="RECEIVED">Received</option>
-              <option value="REJECTED">Rejected</option>
+              {TRANSFER_STATUS_OPTIONS.map((option) => (
+                <option key={option.value || "all"} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </FilterSelect>
           </ResponsiveFilterPanel>
 
           <Link href="/jewellery/inventory/transfers/new">
             <Button variant="success" size="sm">New transfer</Button>
           </Link>
+          <Link href="/jewellery/inventory/transfers/register">
+            <Button variant="secondary" size="sm">Transfer register</Button>
+          </Link>
         </div>
       }
     >
       {isFetching ? <SkeletonList count={4} /> : null}
 
-      {!isFetching && transfers.length === 0 ? (
+      {error && !isFetching ? (
+        <EmptyState
+          title="Could not load transfers"
+          description="Retry after checking your network or transfer filters."
+          action={{ label: "Retry", onClick: () => void refetch() }}
+        />
+      ) : null}
+
+      {!isFetching && !error && transfers.length === 0 ? (
         <EmptyState
           title="No transfers"
           description={statusFilter ? "No transfers match the selected status." : "Create a new transfer to move stock between branches."}
         />
       ) : null}
 
-      {transfers.length > 0 ? (
+      {actionError ? (
+        <p className="text-sm text-danger-600 app-panel p-3 rounded-xl">{actionError}</p>
+      ) : null}
+
+      {!error && transfers.length > 0 ? (
         <div className="space-y-3">
           {transfers.map((transfer) => (
             <div key={transfer.id} className="app-panel p-4 rounded-2xl">
@@ -123,23 +156,43 @@ export default function TransfersPage() {
 
               <div className="flex items-center gap-2 mt-3">
                 {transfer.status === "REQUESTED" ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => setPendingAction({ id: transfer.id, action: "approve" })}
-                  >
-                    Approve
-                  </Button>
+                  <>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => setPendingAction({ id: transfer.id, action: "approve" })}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="danger"
+                      onClick={() => setPendingAction({ id: transfer.id, action: "reject" })}
+                    >
+                      Reject
+                    </Button>
+                  </>
                 ) : null}
                 {transfer.status === "APPROVED" ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="primary"
-                    onClick={() => setPendingAction({ id: transfer.id, action: "dispatch" })}
-                  >
-                    Dispatch
-                  </Button>
+                  <>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="primary"
+                      onClick={() => setPendingAction({ id: transfer.id, action: "dispatch" })}
+                    >
+                      Dispatch
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="danger"
+                      onClick={() => setPendingAction({ id: transfer.id, action: "reject" })}
+                    >
+                      Reject
+                    </Button>
+                  </>
                 ) : null}
                 {transfer.status === "IN_TRANSIT" ? (
                   <Button
@@ -162,7 +215,7 @@ export default function TransfersPage() {
         onClose={() => setPendingAction(null)}
         onConfirm={handleConfirm}
         title={pendingAction ? ACTION_LABELS[pendingAction.action] : "Confirm action"}
-        description="This action will update the transfer status. Please confirm to proceed."
+        description="This action will update the transfer status and branch movement trail. Please confirm to proceed."
         confirmLabel="Confirm"
         isLoading={isActionLoading}
       />

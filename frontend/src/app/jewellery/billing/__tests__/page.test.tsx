@@ -1,9 +1,13 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { configureStore } from "@reduxjs/toolkit";
+import { Provider } from "react-redux";
 
 import JewelleryBillingPage from "@/app/jewellery/billing/page";
 import { useInfiniteItems } from "@/hooks/useInfiniteItems";
+import jewelleryFiltersReducer from "@/store/jewellery-filters-slice";
 import {
   useGenerateEInvoiceMutation,
+  useGetAdminFeatureFlagsQuery,
   useListCustomersQuery,
   useListInvoicesQuery,
 } from "@/store/jewellery-api";
@@ -40,16 +44,44 @@ jest.mock("@/components/ui/ResponsiveFilterPanel", () => ({
   ),
 }));
 
+jest.mock("@/components/jewellery/shared/CustomerSearchSelect", () => ({
+  CustomerSearchSelect: ({ label, value, onChange }: any) => (
+    <label>
+      <span>{label}</span>
+      <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>
+        <option value="">All customers</option>
+        <option value="cust-1">Asha</option>
+      </select>
+    </label>
+  ),
+}));
+
 jest.mock("@/store/jewellery-api", () => ({
   useListInvoicesQuery: jest.fn(),
   useGenerateEInvoiceMutation: jest.fn(),
+  useGetAdminFeatureFlagsQuery: jest.fn(),
   useListCustomersQuery: jest.fn(),
 }));
 
 const useInfiniteItemsMock = useInfiniteItems as jest.Mock;
 const useListInvoicesQueryMock = useListInvoicesQuery as jest.Mock;
 const useGenerateEInvoiceMutationMock = useGenerateEInvoiceMutation as jest.Mock;
+const useGetAdminFeatureFlagsQueryMock = useGetAdminFeatureFlagsQuery as jest.Mock;
 const useListCustomersQueryMock = useListCustomersQuery as jest.Mock;
+
+function renderBillingPage() {
+  const store = configureStore({
+    reducer: {
+      jewelleryFilters: jewelleryFiltersReducer,
+    },
+  });
+
+  return render(
+    <Provider store={store}>
+      <JewelleryBillingPage />
+    </Provider>,
+  );
+}
 
 function makeInvoice(overrides: Record<string, unknown> = {}) {
   return {
@@ -60,6 +92,7 @@ function makeInvoice(overrides: Record<string, unknown> = {}) {
     status: "ISSUED",
     customer: "cust-1",
     customer_name: "Asha",
+    customer_gstin: "27ABCDE1234F1Z5",
     reference_invoice: null,
     reference_invoice_no: "",
     place_of_supply_state_code: "27",
@@ -103,6 +136,10 @@ describe("Jewellery billing page list + operational views", () => {
       data: { results: [{ id: "cust-1", name: "Asha", mobile: "9999999999" }] },
       isFetching: false,
     });
+    useGetAdminFeatureFlagsQueryMock.mockReturnValue({
+      data: { einvoice_applicable: true },
+      isFetching: false,
+    });
 
     useListInvoicesQueryMock.mockImplementation((_params: unknown, options?: { skip?: boolean }) => {
       if (options?.skip) {
@@ -124,7 +161,7 @@ describe("Jewellery billing page list + operational views", () => {
   });
 
   it("applies dedicated customer and status filters to invoice list query", async () => {
-    render(<JewelleryBillingPage />);
+    renderBillingPage();
 
     await waitFor(() => {
       expect(useListInvoicesQueryMock).toHaveBeenCalledWith(
@@ -137,7 +174,6 @@ describe("Jewellery billing page list + operational views", () => {
       );
     });
 
-    fireEvent.change(screen.getByLabelText("Customer search"), { target: { value: "asha" } });
     fireEvent.change(screen.getByLabelText("Status"), { target: { value: "ISSUED" } });
     fireEvent.change(screen.getByLabelText("Customer"), { target: { value: "cust-1" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
@@ -170,7 +206,7 @@ describe("Jewellery billing page list + operational views", () => {
       return { data: { count: 0, results: [] }, isFetching: false };
     });
 
-    render(<JewelleryBillingPage />);
+    renderBillingPage();
 
     expect(await screen.findByText("WhatsApp / SMS send")).toBeInTheDocument();
     expect(screen.getByText("INV-MSG")).toBeInTheDocument();
@@ -179,7 +215,7 @@ describe("Jewellery billing page list + operational views", () => {
 
   it("renders e-invoice view and triggers IRN generation for pending rows", async () => {
     currentView = "einvoice";
-    const generateMock = jest.fn();
+    const generateMock = jest.fn(() => ({ unwrap: jest.fn().mockResolvedValue({}) }));
     useGenerateEInvoiceMutationMock.mockReturnValue([generateMock, { isLoading: false }]);
     useListInvoicesQueryMock.mockImplementation((params: { type?: string }, options?: { skip?: boolean }) => {
       if (options?.skip) {
@@ -200,19 +236,23 @@ describe("Jewellery billing page list + operational views", () => {
       return { data: { count: 0, results: [] }, isFetching: false };
     });
 
-    render(<JewelleryBillingPage />);
+    renderBillingPage();
 
     expect(await screen.findByText("E-invoice (IRN+QR)")).toBeInTheDocument();
     expect(screen.getByText("INV-PENDING")).toBeInTheDocument();
     expect(screen.getByText("INV-READY")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Generate IRN" }));
+    const acknowledgmentCheckboxes = screen.getAllByRole("checkbox", { name: /simulated IRN for internal reference only/i });
+    fireEvent.click(acknowledgmentCheckboxes[acknowledgmentCheckboxes.length - 1]);
+    const generateButtons = screen.getAllByRole("button", { name: "Generate IRN" });
+    fireEvent.click(generateButtons[generateButtons.length - 1]);
     expect(generateMock).toHaveBeenCalledWith("inv-pending");
     expect(screen.getByText(/IRN: IRN-ABC-123/i)).toBeInTheDocument();
   });
 
   it("resets all filters including date sort on Reset click", async () => {
-    render(<JewelleryBillingPage />);
+    renderBillingPage();
 
     // Set status to ISSUED and ordering to oldest-first
     fireEvent.change(screen.getByLabelText("Status"), { target: { value: "ISSUED" } });
@@ -242,7 +282,7 @@ describe("Jewellery billing page list + operational views", () => {
       return { data: { count: 0, results: [] }, isFetching: false };
     });
 
-    render(<JewelleryBillingPage />);
+    renderBillingPage();
 
     expect(await screen.findByText("WhatsApp / SMS send")).toBeInTheDocument();
     // No invoice cards rendered — the list container is empty
@@ -256,7 +296,7 @@ describe("Jewellery billing page list + operational views", () => {
       return { data: { count: 0, results: [] }, isFetching: false };
     });
 
-    render(<JewelleryBillingPage />);
+    renderBillingPage();
 
     expect(await screen.findByText("E-invoice (IRN+QR)")).toBeInTheDocument();
     // No invoice cards rendered — neither action button is present
@@ -265,7 +305,7 @@ describe("Jewellery billing page list + operational views", () => {
   });
 
   it("renders date order filter select in tax-invoice view", async () => {
-    render(<JewelleryBillingPage />);
+    renderBillingPage();
 
     const select = await screen.findByLabelText("Date order");
     expect(select).toBeInTheDocument();

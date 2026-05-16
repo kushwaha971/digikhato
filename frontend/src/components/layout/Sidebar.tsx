@@ -7,10 +7,11 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useLogoutMutation } from "@/features/auth/auth-api";
 import { useRoleAccess, type Permission } from "@/hooks/useRoleAccess";
 import type { UserModuleRole } from "@/store/auth-slice";
-import { ROUTES } from "@/lib/routes";
+import { ROUTES, getModuleLandingRoute, type AppModuleCode } from "@/lib/routes";
 import { getModuleContext, getModuleLabel, type ModuleContext } from "@/lib/moduleNav";
 import { useSidebarState } from "@/lib/sidebar-state";
-import { clearAuth } from "@/store/auth-slice";
+import { clearAuth, getAccessibleModules } from "@/store/auth-slice";
+import { setSelectedModule } from "@/store/module-slice";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 
 export interface ModuleFeatureGate {
@@ -208,6 +209,13 @@ export const NOTES_MODULE_NAV: NavItem[] = [
   },
 ];
 
+const SETTINGS_ICON = (
+  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+  </svg>
+);
+
 export const JEWELLERY_MODULE_NAV: NavItem[] = [
   { href: ROUTES.app.jewellery.dashboard, label: "Dashboard", permission: "view:modules", moduleFeature: { module: "jewellery", feature: "dashboard" }, icon: LOAN_MODULE_NAV[0].icon },
   { href: ROUTES.app.jewellery.billing, label: "Billing & Sales", permission: "view:modules", moduleFeature: { module: "jewellery", feature: "billing" }, icon: LOAN_MODULE_NAV[2].icon },
@@ -221,6 +229,7 @@ export const JEWELLERY_MODULE_NAV: NavItem[] = [
   { href: ROUTES.app.jewellery.usersRoles, label: "Users & Roles", permission: "view:modules", moduleFeature: { module: "jewellery", feature: "users_roles" }, icon: LOAN_MODULE_NAV[1].icon },
   { href: ROUTES.app.jewellery.multiBranch, label: "Multi-Branch", permission: "view:modules", moduleFeature: { module: "jewellery", feature: "multi_branch" }, icon: LOAN_MODULE_NAV[5].icon },
   { href: ROUTES.app.jewellery.barcodeRfid, label: "Barcode / RFID", permission: "view:modules", moduleFeature: { module: "jewellery", feature: "barcode" }, icon: NOTES_MODULE_NAV[0].icon },
+  { href: ROUTES.app.jewellery.settings, label: "Settings", permission: "view:modules", moduleFeature: { module: "jewellery", feature: "dashboard" }, icon: SETTINGS_ICON },
   {
     href: ROUTES.app.jewellery.rates,
     label: "MCX Live Rate",
@@ -288,12 +297,7 @@ export const SETTINGS_NAV: NavItem = {
   href: ROUTES.app.settings,
   label: "Settings",
   permission: "view:settings",
-  icon: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-    </svg>
-  ),
+  icon: SETTINGS_ICON,
 };
 
 export const MODULE_SWITCH_NAV: NavItem = {
@@ -495,6 +499,16 @@ export const JEWELLERY_FEATURE_SECTIONS: ReadonlyArray<SidebarFeatureSection> = 
         permission: "view:modules",
         moduleFeature: { module: "jewellery", feature: "barcode" },
         icon: JEWELLERY_MODULE_NAV[11].icon,
+      },
+      {
+        href: ROUTES.app.jewellery.settings,
+        label: "Settings",
+        permission: "view:modules",
+        moduleFeature: { module: "jewellery", feature: "dashboard" },
+        icon: SETTINGS_ICON,
+        children: [
+          { label: "Live MCX rate", href: ROUTES.app.jewellery.rates },
+        ],
       },
       {
         href: ROUTES.app.jewellery.rates,
@@ -754,6 +768,74 @@ function ModuleFeatureGroup({
   );
 }
 
+const MODULE_LABELS: Record<AppModuleCode, string> = {
+  udhaar: "Udhaar Book",
+  loans: "Loan Management",
+  jewellery: "Jewellery ERP",
+};
+
+function ModuleSwitcher({
+  modules,
+  activeModule,
+  collapsed,
+  onSwitch,
+}: Readonly<{
+  modules: AppModuleCode[];
+  activeModule: AppModuleCode | null;
+  collapsed: boolean;
+  onSwitch: (module: AppModuleCode) => void;
+}>) {
+  if (modules.length <= 1) return null;
+
+  return (
+    <div className="mt-3 pt-3 border-t border-border/70 space-y-1">
+      {!collapsed && (
+        <p className="px-3 pt-1 pb-0.5 text-[10px] font-bold uppercase tracking-widest text-muted">
+          Switch module
+        </p>
+      )}
+      {modules.map((mod) => {
+        const isActive = activeModule === mod;
+        return (
+          <button
+            key={mod}
+            type="button"
+            onClick={() => onSwitch(mod)}
+            title={collapsed ? MODULE_LABELS[mod] : undefined}
+            className={[
+              "w-full flex items-center rounded-xl transition-all duration-150",
+              collapsed ? "justify-center p-2.5" : "gap-3 px-3 py-2.5",
+              isActive
+                ? "bg-[var(--sidebar-active-bg)] text-[var(--sidebar-active-text)] font-semibold"
+                : "text-[var(--sidebar-text)] hover:bg-[var(--sidebar-active-bg)] hover:text-[var(--sidebar-active-text)]",
+            ].join(" ")}
+          >
+            <span className="text-primary-500 flex-shrink-0">
+              {mod === "jewellery" ? (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3l8 6-8 12L4 9l8-6z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 9h16" />
+                </svg>
+              ) : mod === "loans" ? (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2v2h6v-2c0-1.105-1.343-2-3-2z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 12h5m6 0h5M4 17h16M4 7h16" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 4h11a3 3 0 013 3v10a3 3 0 01-3 3H6a2 2 0 00-2 2V6a2 2 0 012-2z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 9h8M8 13h8" />
+                </svg>
+              )}
+            </span>
+            {!collapsed && <span className="text-sm truncate">{MODULE_LABELS[mod]}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function Sidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -771,6 +853,14 @@ export function Sidebar() {
   const canSeeItem = buildCanSeeItem(moduleRoles, can);
   const moduleContext = getModuleContext(pathname);
   const inJewelleryModule = moduleContext === "jewellery" && !isSuperAdmin && !isBorrower;
+
+  const accessibleModules = getAccessibleModules(currentUser) as AppModuleCode[];
+  const selectedModule = useAppSelector((state) => state.module.selectedModule);
+
+  const handleModuleSwitch = (mod: AppModuleCode) => {
+    dispatch(setSelectedModule(mod));
+    router.push(getModuleLandingRoute(mod));
+  };
 
   const isActive = (href: string) => isPathActive(currentRoute, href);
 
@@ -954,40 +1044,14 @@ export function Sidebar() {
           ) : null
         )}
 
-        {!isSuperAdmin && !isBorrower && moduleContext && visibleAppTools.length > 0 ? (
-          <div className="mt-3 pt-3 border-t border-border/70 space-y-1">
-            {!collapsed && (
-              <p className="px-3 pt-1 pb-0.5 text-[10px] font-bold uppercase tracking-widest text-muted">
-                Apps
-              </p>
-            )}
-            {visibleAppTools.map((item) => {
-              const subItems = getVisibleSubItems(item.href, canSeeItem);
-              const expanded = expandedGroups[item.href] ?? false;
-              if (subItems.length === 0) {
-                return (
-                  <NavLink key={item.href} item={item} isActive={isActive(item.href)} collapsed={collapsed} />
-                );
-              }
-              return (
-                <NavGroupLink
-                  key={item.href}
-                  item={item}
-                  childrenItems={subItems}
-                  pathname={currentRoute}
-                  collapsed={collapsed}
-                  expanded={expanded}
-                  onToggle={() =>
-                    setExpandedGroups((prev) => ({
-                      ...prev,
-                      [item.href]: !(prev[item.href] ?? false),
-                    }))
-                  }
-                />
-              );
-            })}
-          </div>
-        ) : null}
+        {!isSuperAdmin && !isBorrower && (
+          <ModuleSwitcher
+            modules={accessibleModules}
+            activeModule={moduleContext as AppModuleCode | null}
+            collapsed={collapsed}
+            onSwitch={handleModuleSwitch}
+          />
+        )}
       </nav>
 
       {/* Settings */}

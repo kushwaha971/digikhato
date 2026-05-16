@@ -25,6 +25,8 @@ import type {
   JwlCustomerOrder,
   JwlKarigarIssue,
   JwlKarigarReceipt,
+  JwlMetal,
+  JwlPurity,
   OrderStatus,
 } from "@/store/jewellery-api";
 import {
@@ -691,7 +693,9 @@ function IssuesView() {
 
   const issues = issuesData?.results ?? [];
   const karigars = karigarsData?.results ?? [];
-  const metals = metalsData ?? [];
+  const metals = Array.isArray(metalsData)
+    ? metalsData
+    : ((metalsData as unknown as { results?: JwlMetal[] } | undefined)?.results ?? []);
 
   const formik = useFormik({
     initialValues: {
@@ -725,7 +729,9 @@ function IssuesView() {
     { metal: formik.values.metal },
     { skip: !formik.values.metal },
   );
-  const purities = puritiesData ?? [];
+  const purities = Array.isArray(puritiesData)
+    ? puritiesData
+    : ((puritiesData as unknown as { results?: JwlPurity[] } | undefined)?.results ?? []);
 
   const { data: karigarOrdersData } = useListOrdersQuery(
     { status: "METAL_ISSUED" },

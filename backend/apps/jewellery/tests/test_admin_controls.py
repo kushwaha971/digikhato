@@ -11,6 +11,8 @@ from apps.common.constants import JwlRoleCode, ModuleCode
 from apps.jewellery.models.billing import Customer, SalesInvoice
 from apps.jewellery.models.inventory import Item
 from apps.jewellery.models.master import Category, Design, Metal, Purity
+from apps.jewellery.models.admin import AdminControl
+from apps.jewellery.serializers.admin import LockPeriodSerializer
 from apps.onboarding.models import BusinessProfile
 from apps.users.models import User, UserModuleRole
 
@@ -184,6 +186,14 @@ class AdminFeatureFlagsAndTrashTests(APITestCase):
         )
         resp = self.client.post(restore_url, {}, format="json")
         self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_lock_period_serializer_uses_model_reason_default(self):
+        serializer = LockPeriodSerializer(data={})
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(
+            serializer.validated_data["reason"],
+            AdminControl._meta.get_field("lock_period_reason").default,
+        )
 
 
 class BillingLockPeriodEnforcementTests(APITestCase):

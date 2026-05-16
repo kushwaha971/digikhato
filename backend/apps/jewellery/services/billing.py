@@ -21,6 +21,7 @@ from apps.jewellery.models.billing import (
 )
 from apps.jewellery.models.inventory import Item
 from apps.jewellery.services.admin import get_admin_control
+from apps.jewellery.services.inventory import ITEM_STATUS_IN_STOCK
 from apps.jewellery.services.number_series import get_next_number
 from apps.jewellery.services.outstanding import post_movement
 from apps.notifications.models import Notification, NotificationType
@@ -28,6 +29,32 @@ from apps.notifications.models import Notification, NotificationType
 TWO = Decimal("0.01")
 FOUR = Decimal("0.0001")
 ONE = Decimal("1")
+
+INVOICE_TYPE_DEFAULT = SalesInvoice._meta.get_field("invoice_type").default
+LINE_MAKING_MODE_DEFAULT = SalesInvoiceLine._meta.get_field("making_mode").default
+LINE_GST_RATE_DEFAULT = SalesInvoiceLine._meta.get_field("gst_rate_pct").default
+PAYMENT_MODE_DEFAULT = SalesInvoicePayment._meta.get_field("mode").default
+OLD_GOLD_METAL_DEFAULT = OldGoldPurchase._meta.get_field("metal_code").default
+SHARE_CHANNEL_CHOICES = ("WA", "SMS", "EMAIL")
+
+# Invoice status constants — match SalesInvoice.StatusChoices DB values exactly
+INVOICE_STATUS_DRAFT = "DRAFT"
+INVOICE_STATUS_ISSUED = "ISSUED"
+INVOICE_STATUS_CANCELLED = "CANCELLED"
+
+# Invoice type constants — match SalesInvoice.TYPES DB values exactly
+INVOICE_TYPE_TAX = "TAX_INVOICE"
+INVOICE_TYPE_ESTIMATE = "ESTIMATE"
+INVOICE_TYPE_CREDIT_NOTE = "CREDIT_NOTE"
+INVOICE_TYPE_CASH_MEMO = "CASH_MEMO"
+INVOICE_TYPE_NON_GST = "NON_GST"
+
+# Item status constants — used for stock state transitions during issue/cancel
+ITEM_STATUS_SOLD = "SOLD"
+
+
+def _default_if_blank(value: Any, default: Any) -> Any:
+    return default if value in (None, "") else value
 
 
 def _pdf_escape(text: str) -> str:
@@ -202,12 +229,12 @@ def calculate_line(line_data: dict, is_inter_state: bool) -> dict:
     """
     net_wt = Decimal(str(line_data.get("net_wt", 0)))
     rate_per_gram = Decimal(str(line_data.get("rate_per_gram", 0)))
-    making_mode = line_data.get("making_mode", "PER_GRAM")
+    making_mode = _default_if_blank(line_data.get("making_mode"), LINE_MAKING_MODE_DEFAULT)
     making_rate = Decimal(str(line_data.get("making_rate", 0)))
     wastage_pct = Decimal(str(line_data.get("wastage_pct", 0)))
     hallmarking_fee = Decimal(str(line_data.get("hallmarking_fee", 0)))
     stone_value = Decimal(str(line_data.get("stone_value", 0)))
-    gst_rate_pct = Decimal(str(line_data.get("gst_rate_pct", 3)))
+    gst_rate_pct = Decimal(str(_default_if_blank(line_data.get("gst_rate_pct"), LINE_GST_RATE_DEFAULT)))
 
     metal_value = (net_wt * rate_per_gram).quantize(TWO, rounding=ROUND_HALF_UP)
     making_charge = calc_making_charge(making_mode, net_wt, metal_value, making_rate)
@@ -271,7 +298,7 @@ def calculate_invoice(lines_data: list[dict], discount_amount: Decimal, is_inter
     for cl in computed_lines:
         alloc = Decimal(str(cl["discount_allocated"]))
         reduced_metal_part = max(Decimal(str(cl["line_metal_part"])) - alloc, Decimal("0.00"))
-        gst_rate_pct = Decimal(str(cl.get("gst_rate_pct", 3)))
+        gst_rate_pct = Decimal(str(_default_if_blank(cl.get("gst_rate_pct"), LINE_GST_RATE_DEFAULT)))
         hallmarking_fee = Decimal(str(cl.get("hallmarking_fee", 0)))
         gst_info = calc_line_gst(reduced_metal_part, hallmarking_fee, gst_rate_pct, is_inter_state)
         total_cgst += gst_info["cgst"]
@@ -322,7 +349,7 @@ def issue_invoice(invoice: SalesInvoice, issued_by: Any) -> SalesInvoice:
     4. For credit notes: set linked Item.status → IN_STOCK.
     4. Estimates: no stock movement on issue.
     """
-    if invoice.status != "DRAFT":
+    if invoice.status != INVOICE_STATUS_DRAFT:
         raise ValueError(f"Only DRAFT invoices can be issued. Current status: {invoice.status}")
 
     with transaction.atomic():
@@ -333,43 +360,43 @@ def issue_invoice(invoice: SalesInvoice, issued_by: Any) -> SalesInvoice:
                 branch_name=invoice.branch_name,
             )
 
-        invoice.status = "ISSUED"
+        invoice.status = INVOICE_STATUS_ISSUED
         invoice.issued_at = timezone.now()
         invoice.issued_by = issued_by
         invoice.save(update_fields=["voucher_no", "status", "issued_at", "issued_by", "updated_at"])
 
         # Move linked items to SOLD (not for estimates/credit notes)
-        if invoice.invoice_type in ("TAX_INVOICE", "CASH_MEMO", "NON_GST"):
+        if invoice.invoice_type in (INVOICE_TYPE_TAX, INVOICE_TYPE_CASH_MEMO, INVOICE_TYPE_NON_GST):
             item_ids = (
                 SalesInvoiceLine.objects
                 .filter(invoice=invoice, item__isnull=False)
                 .values_list("item_id", flat=True)
             )
             if item_ids:
-                in_stock = Item.objects.filter(id__in=item_ids, status="IN_STOCK")
-                not_in_stock = Item.objects.filter(id__in=item_ids).exclude(status="IN_STOCK")
+                in_stock = Item.objects.filter(id__in=item_ids, status=ITEM_STATUS_IN_STOCK)
+                not_in_stock = Item.objects.filter(id__in=item_ids).exclude(status=ITEM_STATUS_IN_STOCK)
                 if not_in_stock.exists():
                     codes = list(not_in_stock.values_list("sku", flat=True))
                     raise ValueError(f"Items not in stock: {codes}. Cannot issue invoice.")
-                in_stock.update(status="SOLD")
-        elif invoice.invoice_type == "CREDIT_NOTE":
+                in_stock.update(status=ITEM_STATUS_SOLD)
+        elif invoice.invoice_type == INVOICE_TYPE_CREDIT_NOTE:
             item_ids = (
                 SalesInvoiceLine.objects
                 .filter(invoice=invoice, item__isnull=False)
                 .values_list("item_id", flat=True)
             )
             if item_ids:
-                sold_items = Item.objects.filter(id__in=item_ids, status="SOLD")
-                not_sold = Item.objects.filter(id__in=item_ids).exclude(status="SOLD")
+                sold_items = Item.objects.filter(id__in=item_ids, status=ITEM_STATUS_SOLD)
+                not_sold = Item.objects.filter(id__in=item_ids).exclude(status=ITEM_STATUS_SOLD)
                 if not_sold.exists():
                     codes = list(not_sold.values_list("sku", flat=True))
                     raise ValueError(f"Items not in sold state: {codes}. Cannot issue credit note.")
-                sold_items.update(status="IN_STOCK")
+                sold_items.update(status=ITEM_STATUS_IN_STOCK)
 
         if invoice.customer_id:
-            balance_delta = Decimal(str(invoice.balance_amount or 0))
+            balance_delta = Decimal(str(_default_if_blank(invoice.balance_amount, 0)))
             if balance_delta != 0:
-                if invoice.invoice_type == "CREDIT_NOTE":
+                if invoice.invoice_type == INVOICE_TYPE_CREDIT_NOTE:
                     post_movement(
                         tenant=invoice.tenant,
                         customer=invoice.customer,
@@ -381,7 +408,7 @@ def issue_invoice(invoice: SalesInvoice, issued_by: Any) -> SalesInvoice:
                         txn_date=timezone.localdate(invoice.issued_at) if invoice.issued_at else timezone.localdate(),
                         created_by=issued_by,
                     )
-                elif invoice.invoice_type in ("TAX_INVOICE", "CASH_MEMO", "NON_GST"):
+                elif invoice.invoice_type in (INVOICE_TYPE_TAX, INVOICE_TYPE_CASH_MEMO, INVOICE_TYPE_NON_GST):
                     post_movement(
                         tenant=invoice.tenant,
                         customer=invoice.customer,
@@ -404,13 +431,13 @@ def cancel_invoice(invoice: SalesInvoice, cancelled_by: Any, reason: str) -> Sal
     Cancel an issued invoice. Reverses item status → IN_STOCK.
     Draft invoices can be deleted; only ISSUED invoices are cancelled.
     """
-    if invoice.status == "CANCELLED":
+    if invoice.status == INVOICE_STATUS_CANCELLED:
         raise ValueError("Invoice is already cancelled.")
-    if invoice.status == "DRAFT":
+    if invoice.status == INVOICE_STATUS_DRAFT:
         raise ValueError("Delete draft invoices instead of cancelling.")
 
     with transaction.atomic():
-        invoice.status = "CANCELLED"
+        invoice.status = INVOICE_STATUS_CANCELLED
         invoice.cancelled_at = timezone.now()
         invoice.cancelled_by = cancelled_by
         invoice.cancel_reason = reason
@@ -423,15 +450,15 @@ def cancel_invoice(invoice: SalesInvoice, cancelled_by: Any, reason: str) -> Sal
             .values_list("item_id", flat=True)
         )
         if item_ids:
-            if invoice.invoice_type == "CREDIT_NOTE":
-                Item.objects.filter(id__in=item_ids, status="IN_STOCK").update(status="SOLD")
-            elif invoice.invoice_type in ("TAX_INVOICE", "CASH_MEMO", "NON_GST"):
-                Item.objects.filter(id__in=item_ids, status="SOLD").update(status="IN_STOCK")
+            if invoice.invoice_type == INVOICE_TYPE_CREDIT_NOTE:
+                Item.objects.filter(id__in=item_ids, status=ITEM_STATUS_IN_STOCK).update(status=ITEM_STATUS_SOLD)
+            elif invoice.invoice_type in (INVOICE_TYPE_TAX, INVOICE_TYPE_CASH_MEMO, INVOICE_TYPE_NON_GST):
+                Item.objects.filter(id__in=item_ids, status=ITEM_STATUS_SOLD).update(status=ITEM_STATUS_IN_STOCK)
 
         if invoice.customer_id:
-            balance_delta = Decimal(str(invoice.balance_amount or 0))
+            balance_delta = Decimal(str(_default_if_blank(invoice.balance_amount, 0)))
             if balance_delta != 0:
-                if invoice.invoice_type == "CREDIT_NOTE":
+                if invoice.invoice_type == INVOICE_TYPE_CREDIT_NOTE:
                     post_movement(
                         tenant=invoice.tenant,
                         customer=invoice.customer,
@@ -443,7 +470,7 @@ def cancel_invoice(invoice: SalesInvoice, cancelled_by: Any, reason: str) -> Sal
                         txn_date=timezone.localdate(invoice.cancelled_at) if invoice.cancelled_at else timezone.localdate(),
                         created_by=cancelled_by,
                     )
-                elif invoice.invoice_type in ("TAX_INVOICE", "CASH_MEMO", "NON_GST"):
+                elif invoice.invoice_type in (INVOICE_TYPE_TAX, INVOICE_TYPE_CASH_MEMO, INVOICE_TYPE_NON_GST):
                     post_movement(
                         tenant=invoice.tenant,
                         customer=invoice.customer,
@@ -463,9 +490,9 @@ def cancel_invoice(invoice: SalesInvoice, cancelled_by: Any, reason: str) -> Sal
 
 def create_invoice(tenant, branch_name: str, invoice_data: dict, lines_data: list[dict], old_gold_data: list[dict], payments_data: list[dict], created_by: Any) -> SalesInvoice:
     """Create a DRAFT invoice with all lines, old gold, and initial payments."""
-    discount_amount = Decimal(str(invoice_data.get("discount_amount", 0)))
-    seller_state = invoice_data.get("seller_state_code", "")
-    buyer_state = invoice_data.get("place_of_supply_state_code", "")
+    discount_amount = Decimal(str(_default_if_blank(invoice_data.get("discount_amount"), 0)))
+    seller_state = _default_if_blank(invoice_data.get("seller_state_code"), "")
+    buyer_state = _default_if_blank(invoice_data.get("place_of_supply_state_code"), "")
     is_inter_state = bool(seller_state and buyer_state and seller_state != buyer_state)
 
     totals = calculate_invoice(lines_data, discount_amount, is_inter_state)
@@ -478,12 +505,12 @@ def create_invoice(tenant, branch_name: str, invoice_data: dict, lines_data: lis
             updated_by=created_by,
             customer_id=invoice_data.get("customer"),
             reference_invoice_id=invoice_data.get("reference_invoice"),
-            invoice_type=invoice_data.get("invoice_type", "TAX_INVOICE"),
+            invoice_type=_default_if_blank(invoice_data.get("invoice_type"), INVOICE_TYPE_DEFAULT),
             voucher_date=invoice_data.get("voucher_date"),
             place_of_supply_state_code=buyer_state,
             seller_state_code=seller_state,
             is_inter_state=is_inter_state,
-            notes=invoice_data.get("notes", ""),
+            notes=_default_if_blank(invoice_data.get("notes"), ""),
             discount_amount=totals["discount_amount"],
             gross_amount=totals["gross_amount"],
             taxable_amount=totals["taxable_amount"],
@@ -498,7 +525,7 @@ def create_invoice(tenant, branch_name: str, invoice_data: dict, lines_data: lis
 
         for i, cl in enumerate(totals["computed_lines"], start=1):
             item_id = cl.get("item")
-            line_huid = (cl.get("huid") or "").strip().upper()
+            line_huid = str(_default_if_blank(cl.get("huid"), "")).strip().upper()
             if item_id:
                 item_huid = (
                     Item.objects.filter(id=item_id, tenant=tenant, deleted_at__isnull=True)
@@ -511,24 +538,24 @@ def create_invoice(tenant, branch_name: str, invoice_data: dict, lines_data: lis
                 invoice=invoice,
                 line_no=i,
                 item_id=item_id,
-                description=cl.get("description", ""),
+                description=_default_if_blank(cl.get("description"), ""),
                 huid=line_huid,
-                hsn_code=cl.get("hsn_code", ""),
-                metal_code=cl.get("metal_code", ""),
-                purity_code=cl.get("purity_code", ""),
+                hsn_code=_default_if_blank(cl.get("hsn_code"), ""),
+                metal_code=_default_if_blank(cl.get("metal_code"), ""),
+                purity_code=_default_if_blank(cl.get("purity_code"), ""),
                 gross_wt=cl.get("gross_wt", 0),
                 net_wt=cl.get("net_wt", 0),
                 stone_wt=cl.get("stone_wt", 0),
                 rate_per_gram=cl.get("rate_per_gram", 0),
                 metal_value=cl["metal_value"],
-                making_mode=cl.get("making_mode", "PER_GRAM"),
+                making_mode=_default_if_blank(cl.get("making_mode"), LINE_MAKING_MODE_DEFAULT),
                 making_rate=cl.get("making_rate", 0),
                 making_charge=cl["making_charge"],
                 wastage_pct=cl.get("wastage_pct", 0),
                 wastage_amount=cl["wastage_amount"],
                 hallmarking_fee=cl.get("hallmarking_fee", 0),
                 stone_value=cl.get("stone_value", 0),
-                gst_rate_pct=cl.get("gst_rate_pct", 3),
+                gst_rate_pct=_default_if_blank(cl.get("gst_rate_pct"), LINE_GST_RATE_DEFAULT),
                 line_metal_part=cl["line_metal_part"],
                 gst_amount=cl["gst_amount"],
                 hallmark_gst_amount=cl.get("hallmark_gst_amount", 0),
@@ -545,8 +572,8 @@ def create_invoice(tenant, branch_name: str, invoice_data: dict, lines_data: lis
             )
             OldGoldPurchase.objects.create(
                 invoice=invoice,
-                metal_code=og.get("metal_code", "GOLD"),
-                description=og.get("description", ""),
+                metal_code=_default_if_blank(og.get("metal_code"), OLD_GOLD_METAL_DEFAULT),
+                description=_default_if_blank(og.get("description"), ""),
                 gross_wt=og["gross_wt"],
                 tested_purity=og["tested_purity"],
                 pure_grams=deduction["pure_grams"],
@@ -561,9 +588,9 @@ def create_invoice(tenant, branch_name: str, invoice_data: dict, lines_data: lis
             amt = Decimal(str(pmt["amount"]))
             SalesInvoicePayment.objects.create(
                 invoice=invoice,
-                mode=pmt.get("mode", "CASH"),
+                mode=_default_if_blank(pmt.get("mode"), PAYMENT_MODE_DEFAULT),
                 amount=amt,
-                reference=pmt.get("reference", ""),
+                reference=_default_if_blank(pmt.get("reference"), ""),
             )
             paid += amt
 
@@ -578,8 +605,18 @@ def create_invoice(tenant, branch_name: str, invoice_data: dict, lines_data: lis
 
 def convert_to_invoice(estimate: SalesInvoice, converted_by: Any) -> SalesInvoice:
     """Clone an ESTIMATE into a new TAX_INVOICE DRAFT with identical lines and totals."""
-    if estimate.invoice_type != "ESTIMATE":
+    if estimate.invoice_type != INVOICE_TYPE_ESTIMATE:
         raise ValueError("Only estimates can be converted to tax invoices.")
+
+    source_label = estimate.voucher_no or str(estimate.id)
+    conversion_note = f"[CONVERTED_FROM_ESTIMATE:{source_label}]"
+    base_notes = (estimate.notes or "").strip()
+    if conversion_note in base_notes:
+        converted_notes = base_notes
+    elif base_notes:
+        converted_notes = f"{base_notes}\n{conversion_note}"
+    else:
+        converted_notes = conversion_note
 
     with transaction.atomic():
         new_invoice = SalesInvoice.objects.create(
@@ -588,11 +625,11 @@ def convert_to_invoice(estimate: SalesInvoice, converted_by: Any) -> SalesInvoic
             created_by=converted_by,
             updated_by=converted_by,
             customer=estimate.customer,
-            invoice_type="TAX_INVOICE",
+            invoice_type=INVOICE_TYPE_TAX,
             seller_state_code=estimate.seller_state_code,
             place_of_supply_state_code=estimate.place_of_supply_state_code,
             is_inter_state=estimate.is_inter_state,
-            notes=estimate.notes,
+            notes=converted_notes,
             discount_amount=estimate.discount_amount,
             gross_amount=estimate.gross_amount,
             taxable_amount=estimate.taxable_amount,
@@ -608,7 +645,7 @@ def convert_to_invoice(estimate: SalesInvoice, converted_by: Any) -> SalesInvoic
             balance_amount=estimate.total_amount,
         )
 
-        for orig_line in estimate.lines.filter(deleted_at__isnull=True).order_by("line_no"):
+        for orig_line in estimate.lines.order_by("line_no"):
             SalesInvoiceLine.objects.create(
                 invoice=new_invoice,
                 line_no=orig_line.line_no,
@@ -637,8 +674,6 @@ def convert_to_invoice(estimate: SalesInvoice, converted_by: Any) -> SalesInvoic
                 discount_allocated=orig_line.discount_allocated,
                 line_subtotal=orig_line.line_subtotal,
                 line_total=orig_line.line_total,
-                created_by=converted_by,
-                updated_by=converted_by,
             )
 
     return new_invoice
@@ -649,17 +684,17 @@ def _sanitize_phone(value: str) -> str:
 
 
 def build_invoice_share_payload(invoice: SalesInvoice, channel: str, to: str) -> dict[str, str]:
-    if invoice.status != "ISSUED":
+    if invoice.status != INVOICE_STATUS_ISSUED:
         raise ValueError("Only issued invoices can be shared.")
 
     channel = str(channel or "").upper().strip()
     recipient = str(to or "").strip()
-    if channel not in {"WA", "SMS", "EMAIL"}:
+    if channel not in SHARE_CHANNEL_CHOICES:
         raise ValueError("Invalid channel. Use WA, SMS, or EMAIL.")
     if not recipient:
         raise ValueError("Recipient is required.")
 
-    doc_label = "Credit Note" if invoice.invoice_type == "CREDIT_NOTE" else "Invoice"
+    doc_label = "Credit Note" if invoice.invoice_type == INVOICE_TYPE_CREDIT_NOTE else "Invoice"
     message = (
         f"{doc_label} {invoice.voucher_no or invoice.id} for "
         f"Rs {invoice.total_amount} is ready. "
@@ -706,9 +741,9 @@ def send_invoice(invoice: SalesInvoice, channel: str, to: str, sent_by: Any) -> 
 
 
 def generate_e_invoice(invoice: SalesInvoice, generated_by: Any) -> SalesInvoice:
-    if invoice.status != "ISSUED":
+    if invoice.status != INVOICE_STATUS_ISSUED:
         raise ValueError("Only issued invoices can generate e-invoice.")
-    if invoice.invoice_type != "TAX_INVOICE":
+    if invoice.invoice_type != INVOICE_TYPE_TAX:
         raise ValueError("E-invoice is currently supported only for tax invoices.")
     if not (invoice.customer and (invoice.customer.gstin or "").strip()):
         raise ValueError("E-invoice can be generated only for B2B invoices with customer GSTIN.")

@@ -8,7 +8,7 @@ from rest_framework.test import APITestCase
 from apps.common.constants import JwlRoleCode, ModuleCode
 from apps.jewellery.models.billing import Customer
 from apps.jewellery.models.master import Metal, NumberSeries, Purity
-from apps.jewellery.models.pledge import GoldPledgeLoan, LoanScheme
+from apps.jewellery.models.pledge import GoldPledgeLoan, LoanRepayment, LoanScheme, PledgeItem
 from apps.jewellery.services.pledge import (
     calc_compound_interest,
     calc_daily_interest,
@@ -17,6 +17,7 @@ from apps.jewellery.services.pledge import (
     calc_ltv,
     calc_simple_interest,
     create_loan,
+    record_repayment,
 )
 from apps.onboarding.models import BusinessProfile
 from apps.users.models import User, UserModuleRole
@@ -209,3 +210,38 @@ class PledgeLoanApiTests(APITestCase):
         data = resp.data
         count = data["count"] if isinstance(data, dict) else len(data)
         self.assertEqual(count, 0)
+
+    def test_service_defaults_follow_model_defaults_for_optional_fields(self):
+        loan = create_loan(
+            tenant=self.tenant,
+            branch_name="",
+            customer=self.customer,
+            scheme=self.scheme,
+            data={"principal": Decimal("50000"), "tenure_months": 6},
+            pledge_items_data=[{
+                "metal": str(self.metal.id),
+                "purity": str(self.purity.id),
+                "gross_wt": "10.0000",
+                "net_wt": "9.5000",
+                "valuation_rate": "6200.0000",
+            }],
+            created_by=self.tenant,
+        )
+        pledge_item = loan.pledge_items.get(line_no=1)
+        self.assertEqual(pledge_item.description, PledgeItem._meta.get_field("description").get_default())
+        self.assertEqual(
+            pledge_item.stone_wt,
+            Decimal(str(PledgeItem._meta.get_field("stone_wt").get_default())),
+        )
+
+        repayment, _ = record_repayment(
+            loan=loan,
+            data={
+                "principal_paid": Decimal("10000"),
+                "interest_paid": Decimal("1000"),
+                "mode": "CASH",
+            },
+            created_by=self.tenant,
+        )
+        self.assertEqual(repayment.reference, LoanRepayment._meta.get_field("reference").get_default())
+        self.assertEqual(repayment.items_released, LoanRepayment._meta.get_field("items_released").get_default())

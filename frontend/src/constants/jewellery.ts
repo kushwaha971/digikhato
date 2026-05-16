@@ -7,6 +7,18 @@ type LoanStatus = "ACTIVE" | "RENEWED" | "CLOSED" | "AUCTIONED" | "LOSS";
 // TransferStatus derived from JwlTransfer.status
 type TransferStatus = "REQUESTED" | "APPROVED" | "IN_TRANSIT" | "RECEIVED" | "REJECTED";
 
+// ── Invoice status & type string constants ────────────────────────────────────
+
+export const INVOICE_STATUS_DRAFT: InvoiceStatus = "DRAFT";
+export const INVOICE_STATUS_ISSUED: InvoiceStatus = "ISSUED";
+export const INVOICE_STATUS_CANCELLED: InvoiceStatus = "CANCELLED";
+
+export const INVOICE_TYPE_TAX: InvoiceType = "TAX_INVOICE";
+export const INVOICE_TYPE_ESTIMATE: InvoiceType = "ESTIMATE";
+export const INVOICE_TYPE_CREDIT_NOTE: InvoiceType = "CREDIT_NOTE";
+export const INVOICE_TYPE_CASH_MEMO: InvoiceType = "CASH_MEMO";
+export const INVOICE_TYPE_NON_GST: InvoiceType = "NON_GST";
+
 // ── Invoice ────────────────────────────────────────────────────────────────────
 
 export const INVOICE_STATUS_OPTIONS: ReadonlyArray<{ label: string; value: InvoiceStatus | "" }> = [
@@ -131,6 +143,28 @@ export const INVOICE_TYPE_FORM_OPTIONS: ReadonlyArray<{ label: string; value: In
   { label: "Non-GST bill", value: "NON_GST" },
   { label: "Credit note", value: "CREDIT_NOTE" },
 ];
+
+// ── Billing form defaults ─────────────────────────────────────────────────────
+
+export const BILLING_DEFAULT_NUMERIC_VALUE = "0";
+export const BILLING_DEFAULT_HSN_CODE = "7113";
+export const BILLING_DEFAULT_GST_RATE_PCT = "3";
+export const BILLING_DEFAULT_LINE_METAL_CODE = "GOLD";
+export const BILLING_DEFAULT_LINE_PURITY_CODE = "22K";
+export const BILLING_DEFAULT_MAKING_MODE: MakingMode = "PER_GRAM";
+export const BILLING_DEFAULT_PAYMENT_MODE: PaymentMode = "CASH";
+export const BILLING_DEFAULT_INVOICE_TYPE: InvoiceType = "TAX_INVOICE";
+
+// ── GST report section filters ────────────────────────────────────────────────
+
+export const GST_SECTION_OPTIONS = [
+  { label: "All sections", value: "ALL" },
+  { label: "B2B", value: "B2B" },
+  { label: "B2C", value: "B2C" },
+  { label: "Credit Notes (CDNR)", value: "CDNR" },
+] as const;
+
+export type GstSectionFilter = (typeof GST_SECTION_OPTIONS)[number]["value"];
 
 // ── Split payment mode display ─────────────────────────────────────────────────
 

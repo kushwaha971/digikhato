@@ -9,6 +9,7 @@ from rest_framework.test import APITestCase
 from apps.common.constants import JwlRoleCode, ModuleCode
 from apps.jewellery.models.master import Metal, Purity
 from apps.jewellery.models.rates import RateHistory, TenantRate
+from apps.jewellery.serializers.rates import RateOverrideSerializer
 from apps.jewellery.services.rates import calculate_gold_rate, get_live_rates, record_rate_override
 from apps.onboarding.models import BusinessProfile
 from apps.users.models import User, UserModuleRole
@@ -154,6 +155,19 @@ class RateOverrideTests(APITestCase):
         self.assertEqual(len(rates), 1)
         self.assertEqual(rates[0]["source"], "OVERRIDE")
         self.assertFalse(rates[0]["is_stale"])
+
+    def test_rate_override_serializer_uses_model_reason_default(self):
+        serializer = RateOverrideSerializer(data={
+            "metal": str(self.metal.id),
+            "purity": str(self.purity.id),
+            "buy_rate": "6200.0000",
+            "sell_rate": "6373.0000",
+        })
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(
+            serializer.validated_data["reason"],
+            TenantRate._meta.get_field("override_reason").default,
+        )
 
 
 class StaleFlagTests(APITestCase):

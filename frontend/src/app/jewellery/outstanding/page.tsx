@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Screen } from "@/components/layout/Screen";
 import { Badge } from "@/components/ui/Badge";
@@ -13,8 +13,11 @@ import { SkeletonList } from "@/components/ui/Skeleton";
 import { Textarea } from "@/components/ui/Textarea";
 import { ROUTES } from "@/lib/routes";
 import { useAppSelector } from "@/store/hooks";
+import { BILLING_DEFAULT_NUMERIC_VALUE } from "@/constants/jewellery";
 import {
+  type JwlOutstandingMovement,
   useGetOutstandingPartyQuery,
+  useGetOutstandingMovementsQuery,
   useLazyExportOutstandingCsvQuery,
   useListOutstandingQuery,
   usePostOutstandingAdjustmentMutation,
@@ -53,16 +56,32 @@ function movementTypeLabel(value: string): string {
   return value.replaceAll("_", " ");
 }
 
+function getNextPageNumber(url: string | null): number | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url, "http://localhost");
+    const page = Number(parsed.searchParams.get("page"));
+    return Number.isFinite(page) && page > 0 ? page : null;
+  } catch {
+    return null;
+  }
+}
+
+const MOVEMENTS_PAGE_SIZE = 25;
+
 export default function JewelleryOutstandingPage() {
   const [ageing, setAgeing] = useState<AgeingFilter>("all");
   const [includeZero, setIncludeZero] = useState(false);
   const [selectedBalanceId, setSelectedBalanceId] = useState<string>("");
+  const [movementPage, setMovementPage] = useState(1);
+  const [movementRows, setMovementRows] = useState<JwlOutstandingMovement[]>([]);
   const [adjustOpen, setAdjustOpen] = useState(false);
-  const [amountDelta, setAmountDelta] = useState("0");
-  const [metalDelta, setMetalDelta] = useState("0");
+  const [amountDelta, setAmountDelta] = useState(BILLING_DEFAULT_NUMERIC_VALUE);
+  const [metalDelta, setMetalDelta] = useState(BILLING_DEFAULT_NUMERIC_VALUE);
   const [notes, setNotes] = useState("");
   const [txnDate, setTxnDate] = useState(new Date().toISOString().slice(0, 10));
   const [adjustError, setAdjustError] = useState<string | null>(null);
+  const [adjustSuccess, setAdjustSuccess] = useState<string | null>(null);
 
   const currentUser = useAppSelector((state) => state.auth.currentUser);
   const canAdjust = useMemo(() => {
@@ -74,7 +93,12 @@ export default function JewelleryOutstandingPage() {
     return jwlRoles.has("jwl_admin") || jwlRoles.has("jwl_manager") || currentUser?.role === "admin";
   }, [currentUser]);
 
-  const { data: parties = [], isFetching } = useListOutstandingQuery({
+  const {
+    data: parties = [],
+    isFetching,
+    isError: partiesError,
+    refetch: refetchParties,
+  } = useListOutstandingQuery({
     ageing: ageing === "all" ? undefined : ageing,
     include_zero: includeZero,
   });
@@ -82,6 +106,16 @@ export default function JewelleryOutstandingPage() {
   const { data: partyDetail, isFetching: detailLoading } = useGetOutstandingPartyQuery(selectedBalanceId, {
     skip: !selectedBalanceId,
   });
+  const {
+    data: movementPageData,
+    isFetching: movementsFetching,
+    isLoading: movementsLoading,
+    isError: movementsError,
+    refetch: refetchMovements,
+  } = useGetOutstandingMovementsQuery(
+    { id: selectedBalanceId, page: movementPage, page_size: MOVEMENTS_PAGE_SIZE },
+    { skip: !selectedBalanceId },
+  );
 
   const [postAdjustment, adjustState] = usePostOutstandingAdjustmentMutation();
   const [exportCsv, exportState] = useLazyExportOutstandingCsvQuery();
@@ -103,6 +137,36 @@ export default function JewelleryOutstandingPage() {
   }, [parties]);
 
   const selectedParty = parties.find((p) => p.id === selectedBalanceId) ?? null;
+  const nextMovementPage = useMemo(
+    () => getNextPageNumber(movementPageData?.next ?? null),
+    [movementPageData?.next],
+  );
+  const movementLoadingInitial = movementPage === 1 && (movementsLoading || (movementsFetching && movementRows.length === 0));
+  const movementLoadingMore = movementPage > 1 && movementsFetching;
+  const displayedMovements = useMemo(
+    () => (movementsError ? (partyDetail?.movements ?? []) : movementRows),
+    [movementRows, movementsError, partyDetail?.movements],
+  );
+
+  useEffect(() => {
+    setMovementPage(1);
+    setMovementRows([]);
+  }, [selectedBalanceId]);
+
+  useEffect(() => {
+    if (!selectedBalanceId || !movementPageData) return;
+    setMovementRows((prev) => {
+      if (movementPage === 1) {
+        const incoming = movementPageData.results;
+        const sameRows = prev.length === incoming.length && prev.every((mv, idx) => mv.id === incoming[idx]?.id);
+        return sameRows ? prev : incoming;
+      }
+      const prevIds = new Set(prev.map((mv) => mv.id));
+      const nextRows = movementPageData.results.filter((mv) => !prevIds.has(mv.id));
+      if (nextRows.length === 0) return prev;
+      return [...prev, ...nextRows];
+    });
+  }, [selectedBalanceId, movementPage, movementPageData]);
 
   const submitAdjustment = async () => {
     if (!selectedBalanceId) return;
@@ -119,16 +183,17 @@ export default function JewelleryOutstandingPage() {
       await postAdjustment({
         id: selectedBalanceId,
         movement_type: "MANUAL_ADJUSTMENT",
-        amount_delta: amountDelta || "0",
-        metal_delta_grams: metalDelta || "0",
+        amount_delta: amountDelta || BILLING_DEFAULT_NUMERIC_VALUE,
+        metal_delta_grams: metalDelta || BILLING_DEFAULT_NUMERIC_VALUE,
         notes: notes.trim(),
         txn_date: txnDate,
       }).unwrap();
       setAdjustOpen(false);
-      setAmountDelta("0");
-      setMetalDelta("0");
+      setAmountDelta(BILLING_DEFAULT_NUMERIC_VALUE);
+      setMetalDelta(BILLING_DEFAULT_NUMERIC_VALUE);
       setNotes("");
       setTxnDate(new Date().toISOString().slice(0, 10));
+      setAdjustSuccess("Adjustment posted successfully.");
     } catch {
       setAdjustError("Could not post adjustment. Please verify values and try again.");
     }
@@ -191,6 +256,11 @@ export default function JewelleryOutstandingPage() {
       )}
     >
       <p className="text-xs text-muted mb-3">Ageing is calculated from last activity date.</p>
+      {adjustSuccess ? (
+        <div className="mb-3 rounded-xl border border-success-200 bg-success-50 px-3 py-2 text-sm text-success-700" data-testid="jwl-outstanding-adjust-success">
+          {adjustSuccess}
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         {BUCKET_META.map((bucket) => {
@@ -224,8 +294,16 @@ export default function JewelleryOutstandingPage() {
       </div>
 
       {isFetching ? <SkeletonList count={6} /> : null}
+      {!isFetching && partiesError ? (
+        <div className="mb-3 rounded-xl border border-danger-200 bg-danger-50 px-3 py-3 text-sm text-danger-700" data-testid="jwl-outstanding-list-error">
+          <p>Could not load outstanding balances.</p>
+          <Button type="button" size="sm" variant="secondary" className="mt-2" onClick={() => void refetchParties()}>
+            Retry
+          </Button>
+        </div>
+      ) : null}
 
-      {!isFetching && parties.length === 0 ? (
+      {!isFetching && !partiesError && parties.length === 0 ? (
         <EmptyState
           title="No outstanding balances"
           description="No party balances match the selected filters."
@@ -242,6 +320,7 @@ export default function JewelleryOutstandingPage() {
               type="button"
               onClick={() => setSelectedBalanceId(party.id)}
               className="w-full app-panel p-4 text-left card-clickable"
+              data-testid={`jwl-outstanding-party-card-${party.id}`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -297,12 +376,21 @@ export default function JewelleryOutstandingPage() {
             </div>
 
             <div className="rounded-xl border border-border overflow-hidden">
-              <div className="px-3 py-2 border-b border-border bg-surface2 text-xs text-muted">Last 50 movements</div>
-              <div className="max-h-[48vh] overflow-y-auto">
-                {partyDetail.movements.length === 0 ? (
+              <div className="px-3 py-2 border-b border-border bg-surface2 text-xs text-muted">Movement history</div>
+              <div className="max-h-[48vh] overflow-y-auto" data-testid="jwl-outstanding-movement-panel">
+                {movementLoadingInitial ? (
+                  <SkeletonList count={3} />
+                ) : movementsError && displayedMovements.length === 0 ? (
+                  <div className="px-3 py-4 text-sm text-warning-700">
+                    <p>Could not load movement history.</p>
+                    <Button type="button" size="sm" variant="secondary" className="mt-2" onClick={() => void refetchMovements()}>
+                      Retry
+                    </Button>
+                  </div>
+                ) : displayedMovements.length === 0 ? (
                   <p className="text-sm text-muted px-3 py-4">No movements yet.</p>
                 ) : (
-                  partyDetail.movements.map((mv) => (
+                  displayedMovements.map((mv) => (
                     <div key={mv.id} className="px-3 py-2 border-b border-border last:border-0">
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-xs font-semibold text-text">{movementTypeLabel(mv.movement_type)}</p>
@@ -326,7 +414,32 @@ export default function JewelleryOutstandingPage() {
                   ))
                 )}
               </div>
+              {movementsError ? (
+                <p className="px-3 py-2 text-xs text-warning-700 bg-warning-50 border-t border-border">
+                  Movement history fallback mode active.
+                </p>
+              ) : null}
+              {!movementsError && nextMovementPage ? (
+                <div className="px-3 py-2 border-t border-border bg-surface2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="w-full sm:w-auto"
+                    loading={movementLoadingMore}
+                    onClick={() => setMovementPage(nextMovementPage)}
+                    data-testid="jwl-outstanding-load-more"
+                  >
+                    Load more movements
+                  </Button>
+                </div>
+              ) : null}
             </div>
+            {!canAdjust ? (
+              <p className="text-xs text-muted" data-testid="jwl-outstanding-readonly-note">
+                Read-only access. Manager/Admin role is required to post manual adjustments.
+              </p>
+            ) : null}
           </div>
         )}
       </Drawer>
@@ -336,6 +449,7 @@ export default function JewelleryOutstandingPage() {
         onClose={() => {
           setAdjustOpen(false);
           setAdjustError(null);
+          setAdjustSuccess(null);
         }}
         title="Manual Adjustment"
         size="lg"

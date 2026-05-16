@@ -10,6 +10,11 @@ from apps.common.constants import JwlRoleCode, ModuleCode
 from apps.jewellery.models.billing import Customer
 from apps.jewellery.models.karigar import CustomerOrder, Karigar, KarigarIssue, KarigarReceipt
 from apps.jewellery.models.master import Category, Design, Metal, NumberSeries, Purity
+from apps.jewellery.serializers.karigar import (
+    CreateKarigarIssueSerializer,
+    CreateOrderSerializer,
+    KarigarIssueSerializer,
+)
 from apps.jewellery.services.karigar import (
     advance_order_status,
     create_karigar_issue,
@@ -241,3 +246,47 @@ class KarigarApiTests(APITestCase):
         # pure_received = (97-2) × 91.6/99.9 = 95 × 0.9169... = 87.1071
         # diff = 87.1071 - 89.8579 = -2.75... (deficit)
         self.assertLess(pure_diff, Decimal("0"))
+
+    def test_create_order_serializer_uses_model_notes_default(self):
+        serializer = CreateOrderSerializer(data={
+            "customer_id": str(self.customer.id),
+            "order_date": "2026-05-01",
+        })
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(
+            serializer.validated_data["notes"],
+            CustomerOrder._meta.get_field("notes").default,
+        )
+
+    def test_create_karigar_issue_serializer_uses_model_notes_default(self):
+        serializer = CreateKarigarIssueSerializer(data={
+            "karigar_id": str(self.karigar.id),
+            "metal_id": str(self.metal.id),
+            "gross_wt_issued": "10.0000",
+            "tunch_pct": "91.600",
+        })
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(
+            serializer.validated_data["notes"],
+            KarigarIssue._meta.get_field("notes").default,
+        )
+
+    def test_karigar_issue_serializer_uses_order_no_default_for_null_order(self):
+        issue = KarigarIssue.objects.create(
+            tenant=self.tenant,
+            branch_name="",
+            created_by=self.tenant,
+            updated_by=self.tenant,
+            karigar=self.karigar,
+            order=None,
+            metal=self.metal,
+            date="2026-05-01",
+            gross_wt_issued=Decimal("10.0000"),
+            tunch_pct=Decimal("91.600"),
+            pure_gold_wt_issued=Decimal("9.1692"),
+        )
+        serializer = KarigarIssueSerializer(issue)
+        self.assertEqual(
+            serializer.data["order_no"],
+            CustomerOrder._meta.get_field("order_no").default,
+        )

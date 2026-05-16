@@ -23,6 +23,9 @@ from apps.jewellery.serializers.billing import (
     SalesInvoiceSerializer,
 )
 from apps.jewellery.services.billing import (
+    INVOICE_STATUS_DRAFT,
+    INVOICE_STATUS_ISSUED,
+    INVOICE_TYPE_CREDIT_NOTE,
     calculate_invoice,
     cancel_invoice,
     convert_to_invoice,
@@ -165,10 +168,10 @@ class SalesInvoiceViewSet(viewsets.ModelViewSet):
             if reference_invoice is None:
                 return Response({"reference_invoice": ["Invalid reference invoice."]}, status=status.HTTP_400_BAD_REQUEST)
 
-        if d["invoice_type"] == "CREDIT_NOTE":
+        if d["invoice_type"] == INVOICE_TYPE_CREDIT_NOTE:
             if reference_invoice is None:
                 return Response({"reference_invoice": ["Reference invoice is required for credit note."]}, status=status.HTTP_400_BAD_REQUEST)
-            if reference_invoice.status != "ISSUED":
+            if reference_invoice.status != INVOICE_STATUS_ISSUED:
                 return Response({"reference_invoice": ["Reference invoice must be issued."]}, status=status.HTTP_400_BAD_REQUEST)
         try:
             self._assert_billing_period_open(d.get("voucher_date"))
@@ -252,7 +255,7 @@ class SalesInvoiceViewSet(viewsets.ModelViewSet):
             self._assert_billing_period_open(invoice.voucher_date, branch_name=invoice.branch_name)
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        if invoice.status != "DRAFT":
+        if invoice.status != INVOICE_STATUS_DRAFT:
             return Response(
                 {"detail": "Only draft invoices can be deleted."},
                 status=status.HTTP_400_BAD_REQUEST,

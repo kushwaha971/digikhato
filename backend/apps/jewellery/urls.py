@@ -1,6 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
+from apps.jewellery.views.accounts import CoaView, TrialBalanceView, VoucherViewSet
 from apps.jewellery.views.admin import (
     AdminFeatureFlagsView,
     AdminLockPeriodView,
@@ -34,6 +35,7 @@ from apps.jewellery.views.pledge import (
     LoanRepaymentViewSet,
     LoanSchemeViewSet,
 )
+from apps.jewellery.views.reports import GstR1ReportView, GstR3BReportView
 from apps.jewellery.views.rates import LiveRatesView, RateHistoryViewSet, RateOverrideView
 from apps.jewellery.views.system import JewelleryBootstrapView
 
@@ -77,6 +79,14 @@ router.register("loan-repayments", LoanRepaymentViewSet, basename="loan-repaymen
 router.register("outstanding", PartyOutstandingViewSet, basename="outstanding")
 
 urlpatterns = [
+    path("accounts/coa/", CoaView.as_view(), name="jwl-coa"),
+    path("accounts/vouchers/", VoucherViewSet.as_view({"get": "list", "post": "create"}), name="jwl-vouchers"),
+    path(
+        "accounts/vouchers/<uuid:pk>/post/",
+        VoucherViewSet.as_view({"post": "post_voucher"}),
+        name="jwl-voucher-post",
+    ),
+    path("accounts/trial-balance/", TrialBalanceView.as_view(), name="jwl-trial-balance"),
     path("system/bootstrap/", JewelleryBootstrapView.as_view(), name="jwl-system-bootstrap"),
     path("admin/feature-flags/", AdminFeatureFlagsView.as_view(), name="admin-feature-flags"),
     path("admin/trash/", AdminTrashView.as_view(), name="admin-trash-list"),
@@ -88,6 +98,8 @@ urlpatterns = [
     path("admin/lock-period/", AdminLockPeriodView.as_view(), name="admin-lock-period"),
     path("rates/live/", LiveRatesView.as_view(), name="rate-live"),
     path("rates/override/", RateOverrideView.as_view(), name="rate-override"),
+    path("reports/gstr-1/", GstR1ReportView.as_view(), name="reports-gstr-1"),
+    path("reports/gstr-3b/", GstR3BReportView.as_view(), name="reports-gstr-3b"),
     path("sales/calculate/", CalculateInvoiceView.as_view(), name="invoice-calculate"),
     path("", include(router.urls)),
 ]

@@ -9,8 +9,9 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useLogoutMutation } from "@/features/auth/auth-api";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { getModuleContext, getModuleLabel } from "@/lib/moduleNav";
-import { ROUTES } from "@/lib/routes";
-import { clearAuth } from "@/store/auth-slice";
+import { getModuleLandingRoute, ROUTES, type AppModuleCode } from "@/lib/routes";
+import { clearAuth, getAccessibleModules } from "@/store/auth-slice";
+import { setSelectedModule } from "@/store/module-slice";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
   BORROWER_NAV,
@@ -46,6 +47,14 @@ export function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps) {
   const moduleRoles = currentUser?.module_roles ?? [];
   const canSeeItem = buildCanSeeItem(moduleRoles, can);
   const moduleContext = getModuleContext(pathname);
+  const accessibleModules = getAccessibleModules(currentUser) as AppModuleCode[];
+  const selectedModule = useAppSelector((state) => state.module.selectedModule);
+
+  const handleModuleSwitch = (mod: AppModuleCode) => {
+    dispatch(setSelectedModule(mod));
+    router.push(getModuleLandingRoute(mod));
+    onClose();
+  };
 
   const [mounted, setMounted] = useState(false);
   const [visible, setVisible] = useState(false);
@@ -375,6 +384,52 @@ export function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps) {
               <span className="text-primary-500">{SETTINGS_NAV.icon}</span>
               <span className="text-sm">{SETTINGS_NAV.label}</span>
             </Link>
+          ) : null}
+
+          {!isSuperAdmin && !isBorrower && accessibleModules.length > 1 ? (
+            <div className="mt-3 pt-3 border-t border-border/70 space-y-1">
+              <p className="px-3 pt-1 pb-0.5 text-[10px] font-bold uppercase tracking-widest text-muted">
+                Switch module
+              </p>
+              {accessibleModules.map((mod) => {
+                const isActiveModule = (selectedModule ?? (moduleContext as AppModuleCode | null)) === mod;
+                return (
+                  <button
+                    key={mod}
+                    type="button"
+                    onClick={() => handleModuleSwitch(mod)}
+                    className={[
+                      "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150",
+                      isActiveModule
+                        ? "bg-[var(--sidebar-active-bg)] text-[var(--sidebar-active-text)] font-semibold"
+                        : "text-[var(--sidebar-text)] hover:bg-[var(--sidebar-active-bg)] hover:text-[var(--sidebar-active-text)]",
+                    ].join(" ")}
+                  >
+                    <span className="text-primary-500">
+                      {mod === "jewellery" ? (
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 3l8 6-8 12L4 9l8-6z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 9h16" />
+                        </svg>
+                      ) : mod === "loans" ? (
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2v2h6v-2c0-1.105-1.343-2-3-2z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 12h5m6 0h5M4 17h16M4 7h16" />
+                        </svg>
+                      ) : (
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 4h11a3 3 0 013 3v10a3 3 0 01-3 3H6a2 2 0 00-2 2V6a2 2 0 012-2z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M8 9h8M8 13h8" />
+                        </svg>
+                      )}
+                    </span>
+                    <span className="text-sm truncate">
+                      {mod === "jewellery" ? "Jewellery ERP" : mod === "loans" ? "Loan Management" : "Udhaar Book"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           ) : null}
         </nav>
 

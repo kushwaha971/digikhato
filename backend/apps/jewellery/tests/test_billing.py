@@ -3,6 +3,7 @@
 from decimal import Decimal
 
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -10,10 +11,12 @@ from apps.common.constants import JwlRoleCode, ModuleCode
 from apps.jewellery.models.admin import AdminControl
 from apps.jewellery.models.billing import Customer, OldGoldPurchase, SalesInvoice, SalesInvoiceLine
 from apps.jewellery.models.master import Category, Design, Metal, NumberSeries, Purity
+from apps.jewellery.models.outstanding import PartyOutstandingBalance, PartyOutstandingMovement
 from apps.jewellery.services.billing import (
     calc_making_charge,
     calc_old_gold_deduction,
     calc_wastage,
+    convert_to_invoice,
     calculate_invoice,
     cancel_invoice,
     create_invoice,
@@ -48,21 +51,48 @@ def _make_tenant(mobile, name):
 
 
 def _make_master(tenant):
-    metal = Metal.objects.create(
-        tenant=tenant, branch_name="", created_by=tenant, updated_by=tenant,
-        code="GOLD", name="Gold",
+    metal, _ = Metal.objects.get_or_create(
+        tenant=tenant,
+        code="GOLD",
+        defaults={
+            "branch_name": "",
+            "created_by": tenant,
+            "updated_by": tenant,
+            "name": "Gold",
+        },
     )
-    purity = Purity.objects.create(
-        tenant=tenant, branch_name="", created_by=tenant, updated_by=tenant,
-        metal=metal, code="22K", pct=Decimal("91.600"),
+    purity, _ = Purity.objects.get_or_create(
+        tenant=tenant,
+        metal=metal,
+        code="22K",
+        defaults={
+            "branch_name": "",
+            "created_by": tenant,
+            "updated_by": tenant,
+            "pct": Decimal("91.600"),
+        },
     )
-    category = Category.objects.create(
-        tenant=tenant, branch_name="", created_by=tenant, updated_by=tenant,
-        name="Rings", default_making_charge_formula="PER_GRAM",
+    category, _ = Category.objects.get_or_create(
+        tenant=tenant,
+        parent=None,
+        name="Rings",
+        defaults={
+            "branch_name": "",
+            "created_by": tenant,
+            "updated_by": tenant,
+            "default_making_charge_formula": "PER_GRAM",
+        },
     )
-    design = Design.objects.create(
-        tenant=tenant, branch_name="", created_by=tenant, updated_by=tenant,
-        category=category, code="RG001", name="Plain Ring",
+    design, _ = Design.objects.get_or_create(
+        tenant=tenant,
+        code="RG001",
+        defaults={
+            "branch_name": "",
+            "created_by": tenant,
+            "updated_by": tenant,
+            "category": category,
+            "name": "Plain Ring",
+        },
     )
     item = Item.objects.create(
         tenant=tenant, branch_name="", created_by=tenant, updated_by=tenant,
@@ -299,6 +329,196 @@ class IssueInvoiceTests(APITestCase):
         self.assertEqual(self.item.status, "IN_STOCK")
 
 
+class BillingOutstandingMovementTests(APITestCase):
+    def setUp(self):
+        self.tenant = _make_tenant("9555500032", "Movement Billing Tenant")
+        self.metal, self.purity, self.item = _make_master(self.tenant)
+        self.customer = Customer.objects.create(
+            tenant=self.tenant,
+            branch_name="",
+            created_by=self.tenant,
+            updated_by=self.tenant,
+            name="Movement Customer",
+            mobile="9000000003",
+        )
+
+    def _line(self, item_id):
+        return {
+            "item": str(item_id),
+            "description": "Gold Ring",
+            "metal_code": "GOLD",
+            "purity_code": "22K",
+            "net_wt": "10",
+            "rate_per_gram": "6373",
+            "making_mode": "PER_GRAM",
+            "making_rate": "150",
+            "wastage_pct": "0",
+            "hallmarking_fee": "45",
+            "stone_value": "0",
+            "gst_rate_pct": "3",
+        }
+
+    def _create_draft(self, *, invoice_type, item_id, reference_invoice=None):
+        return create_invoice(
+            tenant=self.tenant,
+            branch_name="",
+            invoice_data={
+                "customer": str(self.customer.id),
+                "invoice_type": invoice_type,
+                "reference_invoice": str(reference_invoice.id) if reference_invoice else None,
+                "discount_amount": 0,
+            },
+            lines_data=[self._line(item_id)],
+            old_gold_data=[],
+            payments_data=[],
+            created_by=self.tenant,
+        )
+
+    def test_create_draft_does_not_post_outstanding_movement(self):
+        _, _, item = _make_master(self.tenant)
+        draft = self._create_draft(invoice_type="TAX_INVOICE", item_id=item.id)
+
+        self.assertEqual(
+            PartyOutstandingMovement.objects.filter(reference_id=str(draft.id)).count(),
+            0,
+        )
+
+    def test_create_credit_note_draft_does_not_post_outstanding_movement(self):
+        _, _, item = _make_master(self.tenant)
+        sale_invoice = self._create_draft(invoice_type="TAX_INVOICE", item_id=item.id)
+        issue_invoice(sale_invoice, issued_by=self.tenant)
+
+        credit_note = self._create_draft(
+            invoice_type="CREDIT_NOTE",
+            item_id=item.id,
+            reference_invoice=sale_invoice,
+        )
+        self.assertEqual(
+            PartyOutstandingMovement.objects.filter(reference_id=str(credit_note.id)).count(),
+            0,
+        )
+
+    def test_cancel_draft_does_not_post_outstanding_movement(self):
+        _, _, item = _make_master(self.tenant)
+        draft = self._create_draft(invoice_type="TAX_INVOICE", item_id=item.id)
+        baseline_count = PartyOutstandingMovement.objects.count()
+
+        with self.assertRaises(ValueError):
+            cancel_invoice(draft, cancelled_by=self.tenant, reason="Draft cancel should fail")
+
+        self.assertEqual(PartyOutstandingMovement.objects.count(), baseline_count)
+
+    def test_issue_sales_docs_post_invoice_debit_with_positive_amount_and_reference(self):
+        for invoice_type in ("TAX_INVOICE", "CASH_MEMO", "NON_GST"):
+            _, _, item = _make_master(self.tenant)
+            invoice = self._create_draft(invoice_type=invoice_type, item_id=item.id)
+            self.assertGreater(invoice.balance_amount, 0)
+
+            issue_invoice(invoice, issued_by=self.tenant)
+
+            movement = PartyOutstandingMovement.objects.get(
+                reference_type="SALES_INVOICE",
+                reference_id=str(invoice.id),
+                movement_type="INVOICE_DEBIT",
+            )
+            self.assertEqual(movement.amount_delta, invoice.balance_amount)
+            self.assertGreater(movement.amount_delta, 0)
+
+    def test_issue_credit_note_posts_invoice_credit_with_negative_amount(self):
+        _, _, item = _make_master(self.tenant)
+        sale_invoice = self._create_draft(invoice_type="TAX_INVOICE", item_id=item.id)
+        issue_invoice(sale_invoice, issued_by=self.tenant)
+
+        credit_note = self._create_draft(
+            invoice_type="CREDIT_NOTE",
+            item_id=item.id,
+            reference_invoice=sale_invoice,
+        )
+        self.assertGreater(credit_note.balance_amount, 0)
+
+        issue_invoice(credit_note, issued_by=self.tenant)
+
+        movement = PartyOutstandingMovement.objects.get(
+            reference_type="SALES_INVOICE",
+            reference_id=str(credit_note.id),
+            movement_type="INVOICE_CREDIT",
+        )
+        self.assertEqual(movement.amount_delta, -credit_note.balance_amount)
+        self.assertLess(movement.amount_delta, 0)
+
+    def test_cancel_issued_sales_docs_post_invoice_credit_with_negative_amount(self):
+        for invoice_type in ("TAX_INVOICE", "CASH_MEMO", "NON_GST"):
+            _, _, item = _make_master(self.tenant)
+            invoice = self._create_draft(invoice_type=invoice_type, item_id=item.id)
+            issue_invoice(invoice, issued_by=self.tenant)
+
+            cancel_invoice(invoice, cancelled_by=self.tenant, reason="Cancel test")
+
+            movement = PartyOutstandingMovement.objects.get(
+                reference_type="SALES_INVOICE_CANCEL",
+                reference_id=str(invoice.id),
+                movement_type="INVOICE_CREDIT",
+            )
+            self.assertEqual(movement.amount_delta, -invoice.balance_amount)
+            self.assertLess(movement.amount_delta, 0)
+
+    def test_cancel_issued_credit_note_posts_invoice_debit_with_positive_amount(self):
+        _, _, item = _make_master(self.tenant)
+        sale_invoice = self._create_draft(invoice_type="TAX_INVOICE", item_id=item.id)
+        issue_invoice(sale_invoice, issued_by=self.tenant)
+        credit_note = self._create_draft(
+            invoice_type="CREDIT_NOTE",
+            item_id=item.id,
+            reference_invoice=sale_invoice,
+        )
+        issue_invoice(credit_note, issued_by=self.tenant)
+
+        cancel_invoice(credit_note, cancelled_by=self.tenant, reason="Cancel credit note")
+
+        movement = PartyOutstandingMovement.objects.get(
+            reference_type="SALES_INVOICE_CANCEL",
+            reference_id=str(credit_note.id),
+            movement_type="INVOICE_DEBIT",
+        )
+        self.assertEqual(movement.amount_delta, credit_note.balance_amount)
+        self.assertGreater(movement.amount_delta, 0)
+
+    def test_estimate_issue_and_cancel_do_not_create_outstanding_movements(self):
+        _, _, item = _make_master(self.tenant)
+        estimate = self._create_draft(invoice_type="ESTIMATE", item_id=item.id)
+        baseline_count = PartyOutstandingMovement.objects.count()
+
+        issue_invoice(estimate, issued_by=self.tenant)
+        cancel_invoice(estimate, cancelled_by=self.tenant, reason="Estimate cancel")
+
+        self.assertEqual(
+            PartyOutstandingMovement.objects.filter(reference_id=str(estimate.id)).count(),
+            0,
+        )
+        self.assertEqual(PartyOutstandingMovement.objects.count(), baseline_count)
+
+    def test_convert_estimate_to_invoice_creates_movement_only_after_issue(self):
+        _, _, item = _make_master(self.tenant)
+        estimate = self._create_draft(invoice_type="ESTIMATE", item_id=item.id)
+
+        converted_invoice = convert_to_invoice(estimate, converted_by=self.tenant)
+
+        self.assertEqual(
+            PartyOutstandingMovement.objects.filter(balance__customer_id=self.customer.id).count(),
+            0,
+        )
+
+        issue_invoice(converted_invoice, issued_by=self.tenant)
+
+        movement = PartyOutstandingMovement.objects.get(
+            reference_type="SALES_INVOICE",
+            reference_id=str(converted_invoice.id),
+            movement_type="INVOICE_DEBIT",
+        )
+        self.assertEqual(movement.amount_delta, converted_invoice.balance_amount)
+        self.assertGreater(movement.amount_delta, 0)
+
+
 # ─── API Endpoint Tests ───────────────────────────────────────────────────────
 
 class BillingApiTests(APITestCase):
@@ -350,10 +570,218 @@ class BillingApiTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         self.assertEqual(resp.data["status"], "DRAFT")
 
+    def test_create_invoice_rejects_invalid_invoice_type_enum(self):
+        url = reverse("jewellery:sales-invoice-list")
+        resp = self.client.post(url, {
+            "customer": str(self.customer.id),
+            "invoice_type": "BAD_TYPE",
+            "lines": [{
+                "item": str(self.item.id),
+                "net_wt": "10",
+                "rate_per_gram": "6373",
+                "making_mode": "PER_GRAM",
+                "making_rate": "150",
+                "wastage_pct": "0",
+                "hallmarking_fee": "45",
+                "stone_value": "0",
+                "gst_rate_pct": "3",
+            }],
+        }, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("invoice_type", resp.data)
+
+    def test_create_invoice_rejects_invalid_line_making_mode_enum(self):
+        url = reverse("jewellery:sales-invoice-list")
+        resp = self.client.post(url, {
+            "customer": str(self.customer.id),
+            "invoice_type": "TAX_INVOICE",
+            "lines": [{
+                "item": str(self.item.id),
+                "net_wt": "10",
+                "rate_per_gram": "6373",
+                "making_mode": "INVALID",
+                "making_rate": "150",
+                "wastage_pct": "0",
+                "hallmarking_fee": "45",
+                "stone_value": "0",
+                "gst_rate_pct": "3",
+            }],
+        }, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("lines", resp.data)
+
+    def test_create_credit_note_without_reference_invoice_returns_400(self):
+        url = reverse("jewellery:sales-invoice-list")
+        resp = self.client.post(url, {
+            "customer": str(self.customer.id),
+            "invoice_type": "CREDIT_NOTE",
+            "lines": [{
+                "item": str(self.item.id),
+                "description": "Gold Ring return",
+                "net_wt": "10",
+                "rate_per_gram": "6373",
+                "making_mode": "PER_GRAM",
+                "making_rate": "150",
+                "wastage_pct": "0",
+                "hallmarking_fee": "45",
+                "stone_value": "0",
+                "gst_rate_pct": "3",
+            }],
+        }, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("reference_invoice", resp.data)
+
+    def test_create_credit_note_with_draft_reference_invoice_returns_400(self):
+        create_url = reverse("jewellery:sales-invoice-list")
+        sale_resp = self.client.post(create_url, {
+            "customer": str(self.customer.id),
+            "invoice_type": "TAX_INVOICE",
+            "lines": [{
+                "item": str(self.item.id),
+                "description": "Gold Ring",
+                "net_wt": "10",
+                "rate_per_gram": "6373",
+                "making_mode": "PER_GRAM",
+                "making_rate": "150",
+                "wastage_pct": "0",
+                "hallmarking_fee": "45",
+                "stone_value": "0",
+                "gst_rate_pct": "3",
+            }],
+        }, format="json")
+        self.assertEqual(sale_resp.status_code, status.HTTP_201_CREATED)
+
+        credit_resp = self.client.post(create_url, {
+            "customer": str(self.customer.id),
+            "invoice_type": "CREDIT_NOTE",
+            "reference_invoice": sale_resp.data["id"],
+            "lines": [{
+                "item": str(self.item.id),
+                "description": "Gold Ring return",
+                "net_wt": "10",
+                "rate_per_gram": "6373",
+                "making_mode": "PER_GRAM",
+                "making_rate": "150",
+                "wastage_pct": "0",
+                "hallmarking_fee": "45",
+                "stone_value": "0",
+                "gst_rate_pct": "3",
+            }],
+        }, format="json")
+        self.assertEqual(credit_resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("reference_invoice", credit_resp.data)
+
+    def test_convert_non_estimate_invoice_returns_400(self):
+        create_url = reverse("jewellery:sales-invoice-list")
+        create_resp = self.client.post(create_url, {
+            "customer": str(self.customer.id),
+            "invoice_type": "TAX_INVOICE",
+            "lines": [{
+                "item": str(self.item.id),
+                "description": "Gold Ring",
+                "net_wt": "10",
+                "rate_per_gram": "6373",
+                "making_mode": "PER_GRAM",
+                "making_rate": "150",
+                "wastage_pct": "0",
+                "hallmarking_fee": "45",
+                "stone_value": "0",
+                "gst_rate_pct": "3",
+            }],
+        }, format="json")
+        self.assertEqual(create_resp.status_code, status.HTTP_201_CREATED)
+        invoice_id = create_resp.data["id"]
+
+        convert_url = reverse("jewellery:sales-invoice-convert-to-invoice-action", kwargs={"pk": invoice_id})
+        convert_resp = self.client.post(convert_url, {}, format="json")
+        self.assertEqual(convert_resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("detail", convert_resp.data)
+
+    def test_issue_invoice_rejects_non_in_stock_item_state(self):
+        self.item.status = "SOLD"
+        self.item.save(update_fields=["status", "updated_at"])
+        create_url = reverse("jewellery:sales-invoice-list")
+        create_resp = self.client.post(create_url, {
+            "customer": str(self.customer.id),
+            "invoice_type": "TAX_INVOICE",
+            "lines": [{
+                "item": str(self.item.id),
+                "description": "Gold Ring",
+                "net_wt": "10",
+                "rate_per_gram": "6373",
+                "making_mode": "PER_GRAM",
+                "making_rate": "150",
+                "wastage_pct": "0",
+                "hallmarking_fee": "45",
+                "stone_value": "0",
+                "gst_rate_pct": "3",
+            }],
+        }, format="json")
+        self.assertEqual(create_resp.status_code, status.HTTP_201_CREATED)
+
+        issue_url = reverse("jewellery:sales-invoice-issue", kwargs={"pk": create_resp.data["id"]})
+        issue_resp = self.client.post(issue_url, {}, format="json")
+        self.assertEqual(issue_resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("detail", issue_resp.data)
+
+    def test_convert_estimate_to_invoice_embeds_audit_note(self):
+        create_url = reverse("jewellery:sales-invoice-list")
+        create_resp = self.client.post(create_url, {
+            "customer": str(self.customer.id),
+            "invoice_type": "ESTIMATE",
+            "notes": "Customer asked for final quote",
+            "lines": [{
+                "item": str(self.item.id),
+                "description": "Gold Ring",
+                "net_wt": "10",
+                "rate_per_gram": "6373",
+                "making_mode": "PER_GRAM",
+                "making_rate": "150",
+                "wastage_pct": "0",
+                "hallmarking_fee": "45",
+                "stone_value": "0",
+                "gst_rate_pct": "3",
+            }],
+        }, format="json")
+        self.assertEqual(create_resp.status_code, status.HTTP_201_CREATED)
+
+        estimate_id = create_resp.data["id"]
+        convert_url = reverse("jewellery:sales-invoice-convert-to-invoice-action", kwargs={"pk": estimate_id})
+        convert_resp = self.client.post(convert_url, {}, format="json")
+        self.assertEqual(convert_resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(convert_resp.data["invoice_type"], "TAX_INVOICE")
+        self.assertIn(f"[CONVERTED_FROM_ESTIMATE:{estimate_id}]", convert_resp.data["notes"])
+
     def test_customer_list(self):
         url = reverse("jewellery:customer-list")
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+    def test_customer_detail_returns_zero_outstanding_when_balance_missing(self):
+        url = reverse("jewellery:customer-detail", kwargs={"pk": self.customer.id})
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data["outstanding_amount_balance"], "0.00")
+        self.assertEqual(resp.data["outstanding_metal_balance_grams"], "0.0000")
+        self.assertIsNone(resp.data["outstanding_last_txn_date"])
+
+    def test_customer_detail_includes_outstanding_snapshot(self):
+        PartyOutstandingBalance.objects.create(
+            tenant=self.tenant,
+            branch_name="",
+            created_by=self.tenant,
+            updated_by=self.tenant,
+            customer=self.customer,
+            amount_balance=Decimal("15250.75"),
+            metal_balance_grams=Decimal("3.2400"),
+            last_txn_date=timezone.localdate(),
+        )
+        url = reverse("jewellery:customer-detail", kwargs={"pk": self.customer.id})
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data["outstanding_amount_balance"], "15250.75")
+        self.assertEqual(resp.data["outstanding_metal_balance_grams"], "3.2400")
+        self.assertEqual(resp.data["outstanding_last_txn_date"], str(timezone.localdate()))
 
     def test_invoice_pdf_endpoint(self):
         create_url = reverse("jewellery:sales-invoice-list")
@@ -524,6 +952,33 @@ class BillingPermissionTests(APITestCase):
         self.assertEqual(issue_resp.status_code, status.HTTP_200_OK)
         return invoice_id
 
+    def _create_estimate_draft(self) -> str:
+        self.client.force_authenticate(user=self.tenant)
+        create_url = reverse("jewellery:sales-invoice-list")
+        create_resp = self.client.post(
+            create_url,
+            {
+                "customer": str(self.customer.id),
+                "invoice_type": "ESTIMATE",
+                "lines": [{
+                    "item": str(self.item.id),
+                    "description": "Estimate Ring",
+                    "net_wt": "10",
+                    "rate_per_gram": "6373",
+                    "making_mode": "PER_GRAM",
+                    "making_rate": "150",
+                    "wastage_pct": "0",
+                    "hallmarking_fee": "45",
+                    "stone_value": "0",
+                    "gst_rate_pct": "3",
+                }],
+                "discount_amount": "0",
+            },
+            format="json",
+        )
+        self.assertEqual(create_resp.status_code, status.HTTP_201_CREATED)
+        return create_resp.data["id"]
+
     def _make_module_user(self, *, mobile: str, name: str, role_code: str) -> User:
         user = User.objects.create_user(
             mobile_number=mobile,
@@ -568,3 +1023,204 @@ class BillingPermissionTests(APITestCase):
         cancel_url = reverse("jewellery:sales-invoice-cancel", kwargs={"pk": invoice_id})
         resp = self.client.post(cancel_url, {"reason": "Customer returned"}, format="json")
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+    def test_cashier_can_convert_estimate(self):
+        estimate_id = self._create_estimate_draft()
+        cashier = self._make_module_user(
+            mobile="9555500044",
+            name="Cashier Convert User",
+            role_code=JwlRoleCode.CASHIER,
+        )
+        self.client.force_authenticate(user=cashier)
+
+        convert_url = reverse("jewellery:sales-invoice-convert-to-invoice-action", kwargs={"pk": estimate_id})
+        resp = self.client.post(convert_url, {}, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(resp.data["invoice_type"], "TAX_INVOICE")
+
+    def test_manager_can_convert_estimate(self):
+        estimate_id = self._create_estimate_draft()
+        manager = self._make_module_user(
+            mobile="9555500045",
+            name="Manager Convert User",
+            role_code=JwlRoleCode.MANAGER,
+        )
+        self.client.force_authenticate(user=manager)
+
+        convert_url = reverse("jewellery:sales-invoice-convert-to-invoice-action", kwargs={"pk": estimate_id})
+        resp = self.client.post(convert_url, {}, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(resp.data["invoice_type"], "TAX_INVOICE")
+
+    def test_auditor_cannot_convert_estimate(self):
+        estimate_id = self._create_estimate_draft()
+        auditor = self._make_module_user(
+            mobile="9555500046",
+            name="Auditor Convert User",
+            role_code=JwlRoleCode.AUDITOR,
+        )
+        self.client.force_authenticate(user=auditor)
+
+        convert_url = reverse("jewellery:sales-invoice-convert-to-invoice-action", kwargs={"pk": estimate_id})
+        resp = self.client.post(convert_url, {}, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+
+# ─── B-2.7 Post-movement consistency ─────────────────────────────────────────
+
+import unittest
+
+
+class PostMovementConsistencyTests(APITestCase):
+    """
+    B-2.7: Post-movement consistency across billing document lifecycle.
+
+    Verifies that item stock states are consistent after each key billing event:
+    ISSUE, CANCEL, CREDIT NOTE, ESTIMATE, and CONVERT.
+    """
+
+    def setUp(self):
+        self.tenant = _make_tenant("9555507001", "Post-Movement Tenant")
+        self.metal, self.purity, self.item = _make_master(self.tenant)
+        self.customer = Customer.objects.create(
+            tenant=self.tenant,
+            branch_name="",
+            created_by=self.tenant,
+            updated_by=self.tenant,
+            name="Consistency Customer",
+            mobile="9100000099",
+        )
+
+    def _line(self, item_id):
+        return {
+            "item": str(item_id),
+            "description": "Gold Ring",
+            "metal_code": "GOLD",
+            "purity_code": "22K",
+            "net_wt": "10",
+            "rate_per_gram": "6373",
+            "making_mode": "PER_GRAM",
+            "making_rate": "150",
+            "wastage_pct": "0",
+            "hallmarking_fee": "45",
+            "stone_value": "0",
+            "gst_rate_pct": "3",
+        }
+
+    def _make_invoice(self, invoice_type, item_id, reference_invoice=None):
+        return create_invoice(
+            tenant=self.tenant,
+            branch_name="",
+            invoice_data={
+                "customer": str(self.customer.id),
+                "invoice_type": invoice_type,
+                "reference_invoice": str(reference_invoice.id) if reference_invoice else None,
+                "discount_amount": 0,
+            },
+            lines_data=[self._line(item_id)],
+            old_gold_data=[],
+            payments_data=[],
+            created_by=self.tenant,
+        )
+
+    def _fresh_item(self):
+        self.item.status = "IN_STOCK"
+        self.item.save(update_fields=["status"])
+        return self.item
+
+    # a. Issue → item SOLD
+    def test_after_invoice_issue_item_status_is_sold(self):
+        item = self._fresh_item()
+        invoice = self._make_invoice("TAX_INVOICE", item.id)
+        issue_invoice(invoice, issued_by=self.tenant)
+        item.refresh_from_db()
+        self.assertEqual(item.status, "SOLD")
+        self.assertEqual(invoice.status, "ISSUED")
+
+    def test_after_invoice_issue_line_references_item(self):
+        item = self._fresh_item()
+        invoice = self._make_invoice("TAX_INVOICE", item.id)
+        issue_invoice(invoice, issued_by=self.tenant)
+        self.assertTrue(SalesInvoiceLine.objects.filter(invoice=invoice, item=item).exists())
+
+    # b. Cancel → item back to IN_STOCK
+    def test_after_invoice_cancel_item_is_in_stock(self):
+        item = self._fresh_item()
+        invoice = self._make_invoice("TAX_INVOICE", item.id)
+        issue_invoice(invoice, issued_by=self.tenant)
+        cancel_invoice(invoice, cancelled_by=self.tenant, reason="Customer changed mind")
+        item.refresh_from_db()
+        self.assertEqual(item.status, "IN_STOCK")
+        self.assertEqual(invoice.status, "CANCELLED")
+
+    def test_after_invoice_cancel_timestamp_set(self):
+        item = self._fresh_item()
+        invoice = self._make_invoice("TAX_INVOICE", item.id)
+        issue_invoice(invoice, issued_by=self.tenant)
+        cancel_invoice(invoice, cancelled_by=self.tenant, reason="Return")
+        invoice.refresh_from_db()
+        self.assertIsNotNone(invoice.cancelled_at)
+
+    # c. Credit note → item IN_STOCK, reference_invoice set
+    def test_credit_note_returns_item_to_in_stock(self):
+        item = self._fresh_item()
+        sale = self._make_invoice("TAX_INVOICE", item.id)
+        issue_invoice(sale, issued_by=self.tenant)
+        item.refresh_from_db()
+        self.assertEqual(item.status, "SOLD")
+
+        cn = self._make_invoice("CREDIT_NOTE", item.id, reference_invoice=sale)
+        self.assertEqual(str(cn.reference_invoice_id), str(sale.id))
+        issue_invoice(cn, issued_by=self.tenant)
+        item.refresh_from_db()
+        self.assertEqual(item.status, "IN_STOCK")
+
+    def test_credit_note_reference_invoice_points_to_original_sale(self):
+        item = self._fresh_item()
+        sale = self._make_invoice("TAX_INVOICE", item.id)
+        issue_invoice(sale, issued_by=self.tenant)
+        cn = self._make_invoice("CREDIT_NOTE", item.id, reference_invoice=sale)
+        cn.refresh_from_db()
+        self.assertEqual(cn.reference_invoice_id, sale.id)
+        self.assertEqual(cn.invoice_type, "CREDIT_NOTE")
+
+    # d. Estimate issue → NO stock movement
+    def test_estimate_issue_does_not_sell_item(self):
+        item = self._fresh_item()
+        estimate = self._make_invoice("ESTIMATE", item.id)
+        issue_invoice(estimate, issued_by=self.tenant)
+        item.refresh_from_db()
+        self.assertEqual(item.status, "IN_STOCK")
+        self.assertEqual(estimate.status, "ISSUED")
+
+    def test_estimate_draft_does_not_change_item_status(self):
+        item = self._fresh_item()
+        estimate = self._make_invoice("ESTIMATE", item.id)
+        self.assertEqual(estimate.status, "DRAFT")
+        item.refresh_from_db()
+        self.assertEqual(item.status, "IN_STOCK")
+
+    def test_estimate_cancel_item_stays_in_stock(self):
+        item = self._fresh_item()
+        estimate = self._make_invoice("ESTIMATE", item.id)
+        issue_invoice(estimate, issued_by=self.tenant)
+        cancel_invoice(estimate, cancelled_by=self.tenant, reason="Quote expired")
+        item.refresh_from_db()
+        self.assertEqual(item.status, "IN_STOCK")
+
+    # e. Estimate → convert → issue → item SOLD
+    def test_estimate_convert_then_issue_sells_item(self):
+        item = self._fresh_item()
+        estimate = self._make_invoice("ESTIMATE", item.id)
+        issue_invoice(estimate, issued_by=self.tenant)
+
+        converted = convert_to_invoice(estimate, converted_by=self.tenant)
+        self.assertEqual(converted.invoice_type, "TAX_INVOICE")
+        self.assertEqual(converted.status, "DRAFT")
+        item.refresh_from_db()
+        self.assertEqual(item.status, "IN_STOCK")  # not sold yet — still draft
+
+        issue_invoice(converted, issued_by=self.tenant)
+        item.refresh_from_db()
+        self.assertEqual(item.status, "SOLD")

@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from apps.jewellery.models.master import Category, Design, Metal, NumberSeries, Purity, TaxSlab
+from apps.users.views import get_effective_tenant
 
 
 class MetalSerializer(serializers.ModelSerializer):
@@ -15,6 +16,15 @@ class PuritySerializer(serializers.ModelSerializer):
     class Meta:
         model = Purity
         fields = ["id", "metal", "metal_code", "code", "pct"]
+
+    def validate_metal(self, value: Metal):
+        request = self.context.get("request")
+        if request is None:
+            return value
+        tenant = get_effective_tenant(request.user)
+        if not tenant or value.tenant_id != tenant.id or value.deleted_at is not None:
+            raise serializers.ValidationError("Selected metal is not available for this tenant.")
+        return value
 
 
 class CategoryTreeSerializer(serializers.ModelSerializer):

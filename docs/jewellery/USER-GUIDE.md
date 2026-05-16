@@ -2,7 +2,7 @@
 
 **For:** Shop staff, salespeople, cashiers, and managers  
 **Language:** Simple, step-by-step — no technical background needed  
-**Last Updated:** 2026-05-05
+**Last Updated:** 2026-05-11
 
 > **Key rule:** If something is not working or you are unsure, always ask your manager before proceeding. Never guess on a bill that has already been issued.
 
@@ -23,7 +23,12 @@
 11. [Cancelling an Invoice](#11-cancelling-an-invoice)
 12. [Stock Take (Physical Count)](#12-stock-take)
 13. [Inter-Branch Transfer](#13-inter-branch-transfer)
-14. [Common Questions and Problems](#14-common-questions-and-problems)
+14. [Multi-Branch Overview](#14-multi-branch-overview)
+15. [GST Report Preview and Sales Register](#15-gst-report-preview-and-sales-register)
+16. [Accounts & Ledger](#16-accounts--ledger)
+17. [Team Users & Roles](#17-team-users--roles)
+18. [Barcode / RFID Tagged Items](#18-barcode--rfid-tagged-items)
+19. [Common Questions and Problems](#19-common-questions-and-problems)
 
 ---
 
@@ -52,7 +57,12 @@
 | **Stock & Inventory** | Checking stock, item details, transfers |
 | **Karigar & Orders** | Custom orders and karigar work |
 | **Gold Pledge Loans** | Gold loan operations |
-| **GST & Reports** | Tax reports and sales summaries |
+| **GST & Reports** | Tax reports and sales register |
+| **Accounts & Ledger** | Chart of accounts, voucher entry, trial balance |
+| **Multi-Branch** | Stock transfer status overview across branches |
+| **Barcode / RFID** | View tagged items by barcode or HUID |
+| **Users & Roles** | Manage your team and their access levels |
+| **Notifications** | In-app operational alerts (manual refresh) |
 | **Admin & Settings** | Gold rate settings, number series |
 
 ---
@@ -120,6 +130,16 @@ The rate will immediately appear in the gold rate ticker at the top of the scree
 4. Click **Save Customer**.
 
 > **Tip:** Always search first before adding a new customer. Duplicate customer records cause confusion later.
+
+### Customer Detail Snapshot
+
+When you open a customer from the list, the profile now shows an **Outstanding** snapshot:
+
+- **Amount balance** (₹): how much the customer currently owes.
+- **Metal balance** (grams): metal-adjusted outstanding, if applicable.
+- **Last outstanding activity date**: most recent outstanding movement date.
+
+Use **View party outstanding** from this card to open the full outstanding screen for deeper history and adjustments.
 
 ---
 
@@ -332,7 +352,7 @@ What happens automatically:
 
 After issuing:
 1. Click **Print** to print the invoice.
-2. Click **Share** to send via WhatsApp or email (coming soon).
+2. Click **Share** to send via configured channels (WhatsApp/SMS/Email, as enabled by your shop admin).
 
 ---
 
@@ -353,9 +373,21 @@ Follow the same steps as creating a bill, but:
 
 The estimate gets a number (e.g., EST00012) but the item remains **In Stock**.
 
-To convert an estimate to a real invoice later:
-- Currently: create a new Tax Invoice referencing the same item.
-- *(Full estimate-to-invoice conversion is coming in a future update.)*
+### Converting an Estimate to Invoice (available from May 9, 2026)
+
+To convert an estimate to a real Tax Invoice:
+1. Open the estimate detail from **Billing & Sales → Invoices**.
+2. Click **Convert to Invoice**.
+3. A new **Tax Invoice (Draft)** is created with copied line items.
+4. Review amounts/payment details, then issue the invoice normally.
+
+Notes:
+- Conversion is allowed only for estimate-type documents.
+- Cancelled estimates cannot be converted.
+- The original estimate remains available for traceability.
+- Estimate date stays on the estimate record; it is not carried forward as accounting movement date.
+- Stock/outstanding accounting effect is applied only when the converted invoice is actually **issued**.
+- The converted invoice is a separate sales document; credit-note `reference_invoice` linkage is not used for this conversion flow.
 
 ---
 
@@ -409,15 +441,22 @@ If your shop has multiple branches and you need to send stock from one branch to
 
 1. Go to **Stock & Inventory → Transfers**.
 2. Click **+ New Transfer**.
-3. Select the **Destination Branch**.
+3. Enter the **From Branch** and **Destination Branch**.
 4. Add the items to transfer by scanning or searching.
 5. Click **Request Transfer**.
+
+Rules enforced by system:
+- Source and destination branch must be different.
+- Only items currently **In Stock** can be added.
+- Item branch must match the selected **From Branch**.
 
 ### Approving and Dispatching (Manager)
 
 1. Manager reviews the transfer request.
-2. Clicks **Approve** then **Dispatch**.
-3. The items move to **Transit** status.
+2. If request is valid, click **Approve** then **Dispatch**.
+3. If request is not valid, click **Reject** (available in `Requested` and `Approved` states).
+4. Rejected transfers cannot be dispatched unless recreated as a new request.
+5. The items move to **Transit** status.
 
 ### Receiving at the Destination Branch
 
@@ -425,9 +464,199 @@ If your shop has multiple branches and you need to send stock from one branch to
 2. Clicks **Mark Received**.
 3. Items move back to **In Stock** at the new branch.
 
+### Transfer Register (Branch-wise Report) — MVP policy
+
+Use this for daily branch movement review and end-of-day reconciliation.
+
+1. Open **Stock & Inventory → Transfers** and switch to **Transfer Register** (when enabled).
+2. Set filters:
+   - **From date / To date** (optional; maximum 92-day window when both dates are set)
+   - **Status**: `All`, `Requested`, `Approved`, `In Transit`, `Received`, `Rejected`
+   - **From Branch** and/or **To Branch**
+3. Review summary and rows for transfer reference, branches, status, quantity/weight, and timestamps.
+4. Click **Export CSV** only after verifying filters.
+
+Operational rules:
+- If **From date** is after **To date**, the system shows a validation error.
+- If selected date range exceeds 92 days, the system shows a validation error.
+- If both branch filters are same branch, result can be empty (valid condition).
+- Export always uses the exact same filters as preview.
+- If no rows are present, export is disabled.
+- Export action is available only to users with report-export permission in Jewellery role policy.
+- This report is operational; advanced valuation analytics are planned for a future phase.
+
 ---
 
-## 14. Common Questions and Problems
+## 14. Multi-Branch Overview
+
+The **Multi-Branch** page gives you a real-time summary of all inter-branch stock transfers without leaving the page.
+
+### Summary Cards
+
+At the top of the page (when no filter is active) you will see three cards:
+- **Pending** — Transfer requests waiting for manager approval
+- **Approved** — Approved but not yet dispatched
+- **In Transit** — Dispatched and on the way to the receiving branch
+
+### Filtering Transfers
+
+Use the filter pills below the summary cards to narrow the list:
+
+| Filter | What it shows |
+|--------|--------------|
+| **All** | Every transfer record |
+| **Pending** | REQUESTED status |
+| **Approved** | APPROVED status |
+| **In Transit** | IN_TRANSIT status |
+| **Received** | Already received at destination |
+| **Rejected** | Rejected by manager |
+
+### Viewing a Transfer
+
+Each transfer card shows:
+- **From branch → To branch**
+- **Status badge** (colour-coded)
+- Item count, creation date, dispatch date (if sent), received date (if received)
+- Any notes added during creation
+
+Click **View** on any card to open the transfer detail page where you can approve, dispatch, reject, or receive.
+
+---
+
+## 15. GST Report Preview and Sales Register
+
+The **Reports** page has two sections: GST Filing cards and the Sales Register.
+
+### GST Filing Cards
+
+| Card | What it links to |
+|------|-----------------|
+| **GSTR-1** | Section-wise invoice preview with CSV export |
+| **GSTR-3B** | Net tax summary with outward supplies and ITC |
+
+Click either card to open the full GST Reports screen. Use it for day-wise GST checks before handing off to your CA:
+
+1. Set **From date / To date** for the filing window.
+2. Choose **Invoice type** (All / Tax Invoice / Credit Note / Estimate) and **GST view** (B2B / B2C).
+3. Review summary cards: Taxable Amount, CGST, SGST, IGST, Invoice Total.
+4. Click **Export CSV** to download for CA review.
+
+> Export is enabled only when preview rows are present. If loading fails, click Retry.
+
+### Sales Register
+
+The Sales Register gives you a full list of invoices for any date range.
+
+1. Under the **Sales Register** heading, enter **Date From** and **Date To**.
+2. Click **Load**.
+3. The table shows: Voucher No, Date, Type, Customer, Taxable Amount, GST, Total, Status.
+4. The badge in the top-right shows how many invoices are displayed (up to 50 per page).
+
+---
+
+## 16. Accounts & Ledger
+
+> **For managers and accountants only.** Counter staff do not need this section.
+
+The **Accounts & Ledger** page has three tabs: **COA**, **Vouchers**, and **Trial Balance**.
+
+### COA (Chart of Accounts)
+
+This is a tree of all accounts in your shop's books — assets, liabilities, income, expenses, and equity.
+
+1. Open **Accounts & Ledger** from the sidebar.
+2. Click the **COA** tab (default).
+3. You will see top-level account groups. Click the **arrow** on any group to expand its sub-accounts.
+4. Each account shows a coloured type badge (Asset / Liability / Income / Expense / Equity).
+
+> System accounts (Cash, Bank, Accounts Payable, Sales, GST Payable, Stock) are pre-seeded and cannot be deleted.
+
+### Vouchers
+
+Vouchers are the accounting entries that move money between accounts.
+
+1. Click the **Vouchers** tab.
+2. Use the **Date From / Date To** filters and the **Type** filter (All / Receipt / Payment / Journal / Contra) to find entries.
+3. Each voucher shows its number, date, type, status (Draft / Posted), and total amount.
+4. Click **New Voucher** to open the entry form:
+   - Select **Voucher Type** and **Date**.
+   - Add lines: each line needs an account, a debit amount, and a credit amount.
+   - Total debits must equal total credits before you can save.
+5. Click **Save** to save as Draft, or click **Post** on a draft voucher to post it to the ledger permanently.
+
+> **Posted vouchers cannot be edited.** Always review carefully before posting.
+
+### Trial Balance
+
+1. Click the **Trial Balance** tab.
+2. Enter **From Date** and **To Date**.
+3. Click **Load**.
+4. The table shows each account with total debits, total credits, and the net balance for the period.
+
+---
+
+## 17. Team Users & Roles
+
+> **Admin users only.** Use this to manage who on your team can access the Jewellery module and what they can do.
+
+### Viewing Your Team
+
+1. Go to **Users & Roles** from the Jewellery sidebar.
+2. You will see a list of all staff who have been granted a Jewellery module role.
+3. Each row shows: Staff name, mobile number, role badge (Admin / Manager / Cashier), branch, and when access was granted.
+
+### Role Levels
+
+| Role | What they can do |
+|------|-----------------|
+| **Admin** | Full access — settings, rates, admin controls, all reports |
+| **Manager** | Can approve transfers, cancel invoices, manage karigar |
+| **Cashier** | Can create bills and collect payments only |
+
+### Granting Access
+
+1. Click **+ Grant Access** (or the equivalent button shown in the screen).
+2. Enter the staff member's mobile number.
+3. Select their role and branch.
+4. Click **Save**.
+
+The staff member can now log in and access the Jewellery module with the role you assigned.
+
+### Revoking Access
+
+1. Find the staff member in the list.
+2. Click the **Revoke** button on their row.
+3. A confirmation dialog appears: confirm to remove their access.
+
+> Revoking access does not delete their user account — they can still log in but will see no Jewellery module features.
+
+---
+
+## 18. Barcode / RFID Tagged Items
+
+The **Barcode / RFID** page lets you quickly find any item in your inventory using its barcode or HUID (Hallmark Unique ID).
+
+### Searching Tagged Items
+
+1. Open **Barcode / RFID** from the Stock & Inventory section.
+2. In the search box, type the **barcode number** or **HUID** of the item.
+3. The table below will filter instantly to matching items.
+
+Each row shows:
+- **SKU** — internal item code
+- **Barcode** — barcode number printed on the tag
+- **HUID** — government hallmarking unique ID
+- **Metal / Purity** — e.g., GOLD / 22K
+- **Branch** — which branch currently holds this item
+- **Status** badge — In Stock, Sold, Transit, Written Off
+
+### Print Tags
+
+> **Barcode / RFID tag printing is coming in a future update.** The "Print Tags" feature is visible but disabled. It will be activated in a later phase.
+
+---
+
+## 19. Common Questions and Problems
 
 ### "I can't find the item when creating a bill"
 
@@ -475,6 +704,20 @@ If your shop has multiple branches and you need to send stock from one branch to
 - Each time the customer pays, open the invoice and add a new payment row.
 - *(Full installment tracking is coming in a future update.)*
 
+### "I can only see recent outstanding movements"
+
+- In **Outstanding** detail, movements are shown in pages (latest first).
+- Click **Load more movements** to fetch older entries.
+- If very old entries are still not visible, ask your manager/admin to check filters and date range.
+
+### "How do Jewellery notifications work right now?"
+
+- Open **Jewellery → Notifications**.
+- Click **Refresh** to fetch latest alerts from backend records.
+- Alerts are stored in system database; no external SMS/WhatsApp/email is sent in current MVP mode.
+- Click an alert to open the related workflow page.
+- If you expect an alert and do not see it, refresh once and ask manager to verify the triggering business action.
+
 ---
 
 ## API Reference (For Managers and IT)
@@ -487,6 +730,7 @@ If your shop has multiple branches and you need to send stock from one branch to
 | Create draft invoice | POST | `/api/jwl/v1/sales/invoices/` |
 | Issue invoice | POST | `/api/jwl/v1/sales/invoices/{id}/issue/` |
 | Cancel invoice | POST | `/api/jwl/v1/sales/invoices/{id}/cancel/` |
+| Convert estimate to invoice draft | POST | `/api/jwl/v1/sales/invoices/{id}/convert-to-invoice/` |
 | Preview calculation | POST | `/api/jwl/v1/sales/calculate/` |
 | Live gold rates | GET | `/api/jwl/v1/rates/live/` |
 | Set rate override | POST | `/api/jwl/v1/rates/override/` |
@@ -498,7 +742,23 @@ If your shop has multiple branches and you need to send stock from one branch to
 | Create transfer | POST | `/api/jwl/v1/transfers/` |
 | Approve transfer | POST | `/api/jwl/v1/transfers/{id}/approve/` |
 | Dispatch transfer | POST | `/api/jwl/v1/transfers/{id}/dispatch/` |
+| Reject transfer | POST | `/api/jwl/v1/transfers/{id}/reject/` |
 | Receive transfer | POST | `/api/jwl/v1/transfers/{id}/receive/` |
+| GST GSTR-1 preview contract | GET | `/api/jwl/v1/reports/gstr-1/?period=YYYYMM` |
+| GST GSTR-1 CSV export (permission-gated) | GET | `/api/jwl/v1/reports/gstr-1/?period=YYYYMM&file_format=excel` |
+| GST GSTR-3B summary contract | GET | `/api/jwl/v1/reports/gstr-3b/?period=YYYYMM` |
+| List notifications (in-app) | GET | `/api/notifications/` |
+| Refresh notifications (in-app) | POST | `/api/notifications/refresh/` |
+| Mark notification as read | PATCH | `/api/notifications/{id}/read/` |
+| Outstanding movement history (paginated) | GET | `/api/jwl/v1/outstanding/{id}/movements/` |
+| Chart of accounts tree | GET | `/api/jwl/v1/accounts/coa/` |
+| List vouchers | GET | `/api/jwl/v1/accounts/vouchers/` |
+| Create voucher | POST | `/api/jwl/v1/accounts/vouchers/` |
+| Post voucher to ledger | POST | `/api/jwl/v1/accounts/vouchers/{id}/post/` |
+| Trial balance | GET | `/api/jwl/v1/accounts/trial-balance/` |
+| Module team roles | GET | `/api/users/modules/jewellery/team-roles/` |
+| Grant module role | POST | `/api/users/modules/jewellery/team-roles/` |
+| Revoke module role | DELETE | `/api/users/modules/jewellery/team-roles/{id}/` |
 
 ---
 
@@ -506,14 +766,11 @@ If your shop has multiple branches and you need to send stock from one branch to
 
 | Feature | What It Will Do |
 |---------|----------------|
-| **Karigar / Custom Orders** | Track custom jewellery orders and karigar work |
-| **Gold Pledge Loans** | Manage gold-secured loans with interest calculation |
-| **GST Filing** | Prepare GSTR-1 and GSTR-3B automatically |
-| **WhatsApp Invoice** | Send invoice directly to customer's WhatsApp |
-| **PDF Invoice** | Download or print a formatted PDF bill |
-| **Customer Ledger** | Track outstanding balance per customer |
-| **Barcode / RFID** | Full barcode and RFID tag management |
-| **Multi-Branch Reports** | Compare sales and stock across all branches |
+| **Karigar / Custom Orders** | Full job-card lifecycle: issue gold to karigar, track return, link to sales |
+| **Gold Pledge Loans** | Manage gold-secured loans with interest accrual and repayment schedule |
+| **Barcode / RFID Tag Printing** | Print barcode + HUID tags directly from the inventory screen |
+| **GSTN Signed E-Invoice (IRN)** | Real government-registered IRN + QR via GSP integration |
+| **Multi-Branch Analytics** | Compare sales, stock value, and margins across all branches |
 
 ---
 

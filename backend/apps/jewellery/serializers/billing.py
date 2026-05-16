@@ -9,15 +9,49 @@ from apps.jewellery.models.billing import (
     SalesInvoiceLine,
     SalesInvoicePayment,
 )
+from apps.jewellery.services.billing import INVOICE_TYPE_CREDIT_NOTE, SHARE_CHANNEL_CHOICES
+
+
+INVOICE_TYPE_CHOICES = [code for code, _ in SalesInvoice._meta.get_field("invoice_type").choices]
+INVOICE_TYPE_DEFAULT = SalesInvoice._meta.get_field("invoice_type").default
+MAKING_MODE_CHOICES = [code for code, _ in SalesInvoiceLine._meta.get_field("making_mode").choices]
+MAKING_MODE_DEFAULT = SalesInvoiceLine._meta.get_field("making_mode").default
+LINE_GST_RATE_DEFAULT = SalesInvoiceLine._meta.get_field("gst_rate_pct").default
+PAYMENT_MODE_CHOICES = [code for code, _ in SalesInvoicePayment._meta.get_field("mode").choices]
+OLD_GOLD_METAL_DEFAULT = OldGoldPurchase._meta.get_field("metal_code").default
 
 
 class CustomerSerializer(serializers.ModelSerializer):
+    outstanding_amount_balance = serializers.SerializerMethodField()
+    outstanding_metal_balance_grams = serializers.SerializerMethodField()
+    outstanding_last_txn_date = serializers.SerializerMethodField()
+
+    def _get_outstanding(self, obj):
+        try:
+            return obj.outstanding
+        except Customer.outstanding.RelatedObjectDoesNotExist:
+            return None
+
+    def get_outstanding_amount_balance(self, obj):
+        outstanding = self._get_outstanding(obj)
+        return f"{outstanding.amount_balance:.2f}" if outstanding else "0.00"
+
+    def get_outstanding_metal_balance_grams(self, obj):
+        outstanding = self._get_outstanding(obj)
+        return f"{outstanding.metal_balance_grams:.4f}" if outstanding else "0.0000"
+
+    def get_outstanding_last_txn_date(self, obj):
+        outstanding = self._get_outstanding(obj)
+        return str(outstanding.last_txn_date) if (outstanding and outstanding.last_txn_date) else None
+
     class Meta:
         model = Customer
         fields = [
             "id", "name", "mobile", "email", "gstin", "pan",
             "state_code", "address", "city", "dob", "anniversary",
-            "loyalty_points", "created_at", "updated_at",
+            "loyalty_points",
+            "outstanding_amount_balance", "outstanding_metal_balance_grams", "outstanding_last_txn_date",
+            "created_at", "updated_at",
         ]
         read_only_fields = ["id", "loyalty_points", "created_at", "updated_at"]
 
@@ -107,16 +141,16 @@ class InvoiceLineWriteSerializer(serializers.Serializer):
     net_wt = serializers.DecimalField(max_digits=12, decimal_places=4, default=0)
     stone_wt = serializers.DecimalField(max_digits=12, decimal_places=4, default=0)
     rate_per_gram = serializers.DecimalField(max_digits=18, decimal_places=4)
-    making_mode = serializers.ChoiceField(choices=["PER_GRAM", "PCT_METAL", "PER_PIECE"], default="PER_GRAM")
+    making_mode = serializers.ChoiceField(choices=MAKING_MODE_CHOICES, default=MAKING_MODE_DEFAULT)
     making_rate = serializers.DecimalField(max_digits=18, decimal_places=4, default=0)
     wastage_pct = serializers.DecimalField(max_digits=6, decimal_places=3, default=0)
     hallmarking_fee = serializers.DecimalField(max_digits=10, decimal_places=2, default=0)
     stone_value = serializers.DecimalField(max_digits=18, decimal_places=2, default=0)
-    gst_rate_pct = serializers.DecimalField(max_digits=5, decimal_places=2, default=3)
+    gst_rate_pct = serializers.DecimalField(max_digits=5, decimal_places=2, default=LINE_GST_RATE_DEFAULT)
 
 
 class OldGoldWriteSerializer(serializers.Serializer):
-    metal_code = serializers.CharField(default="GOLD")
+    metal_code = serializers.CharField(default=OLD_GOLD_METAL_DEFAULT)
     description = serializers.CharField(required=False, default="")
     gross_wt = serializers.DecimalField(max_digits=12, decimal_places=4)
     tested_purity = serializers.DecimalField(max_digits=6, decimal_places=3)
@@ -124,7 +158,7 @@ class OldGoldWriteSerializer(serializers.Serializer):
 
 
 class PaymentWriteSerializer(serializers.Serializer):
-    mode = serializers.ChoiceField(choices=["CASH", "UPI", "CARD", "BANK", "ADVANCE", "CHEQUE", "OTHER"])
+    mode = serializers.ChoiceField(choices=PAYMENT_MODE_CHOICES)
     amount = serializers.DecimalField(max_digits=18, decimal_places=2)
     reference = serializers.CharField(required=False, default="")
 
@@ -132,10 +166,7 @@ class PaymentWriteSerializer(serializers.Serializer):
 class CreateInvoiceSerializer(serializers.Serializer):
     customer = serializers.UUIDField(required=False, allow_null=True)
     reference_invoice = serializers.UUIDField(required=False, allow_null=True)
-    invoice_type = serializers.ChoiceField(
-        choices=["TAX_INVOICE", "ESTIMATE", "CASH_MEMO", "NON_GST", "CREDIT_NOTE"],
-        default="TAX_INVOICE",
-    )
+    invoice_type = serializers.ChoiceField(choices=INVOICE_TYPE_CHOICES, default=INVOICE_TYPE_DEFAULT)
     voucher_date = serializers.DateField(required=False, allow_null=True)
     place_of_supply_state_code = serializers.CharField(required=False, default="")
     seller_state_code = serializers.CharField(required=False, default="")
@@ -146,7 +177,7 @@ class CreateInvoiceSerializer(serializers.Serializer):
     payments = PaymentWriteSerializer(many=True, required=False, default=list)
 
     def validate(self, attrs):
-        if attrs.get("invoice_type") == "CREDIT_NOTE" and not attrs.get("reference_invoice"):
+        if attrs.get("invoice_type") == INVOICE_TYPE_CREDIT_NOTE and not attrs.get("reference_invoice"):
             raise serializers.ValidationError({"reference_invoice": "Reference invoice is required for credit note."})
         return attrs
 
@@ -165,5 +196,5 @@ class CancelInvoiceSerializer(serializers.Serializer):
 
 
 class SendInvoiceSerializer(serializers.Serializer):
-    channel = serializers.ChoiceField(choices=["WA", "SMS", "EMAIL"])
+    channel = serializers.ChoiceField(choices=SHARE_CHANNEL_CHOICES)
     to = serializers.CharField(min_length=3, max_length=120)

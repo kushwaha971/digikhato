@@ -319,6 +319,126 @@ class OutstandingApiTests(APITestCase):
         )
         self.assertEqual(resp.status_code, 201)
 
+    def test_movements_endpoint_is_paginated_and_ordered(self):
+        """GET /outstanding/{id}/movements/ returns paginated newest-first history."""
+        for idx in range(25):
+            post_movement(
+                tenant=self.tenant,
+                customer=self.customer,
+                movement_type="INVOICE_DEBIT",
+                amount_delta=Decimal("100.00"),
+                txn_date=date.today() - timedelta(days=idx),
+            )
+        balance = PartyOutstandingBalance.objects.get(customer=self.customer)
+
+        resp = self.client.get(f"{OUTSTANDING_URL}{balance.id}/movements/?page=1&page_size=10")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["count"], 25)
+        self.assertEqual(len(resp.data["results"]), 10)
+        self.assertIsNotNone(resp.data["next"])
+        self.assertIsNone(resp.data["previous"])
+        self.assertEqual(resp.data["results"][0]["txn_date"], str(date.today()))
+        self.assertEqual(resp.data["results"][1]["txn_date"], str(date.today() - timedelta(days=1)))
+
+    def test_movements_endpoint_filters_by_movement_type(self):
+        """movement_type query param should filter movement rows."""
+        post_movement(
+            tenant=self.tenant,
+            customer=self.customer,
+            movement_type="INVOICE_DEBIT",
+            amount_delta=Decimal("500.00"),
+            txn_date=date.today(),
+        )
+        post_movement(
+            tenant=self.tenant,
+            customer=self.customer,
+            movement_type="PAYMENT_RECEIVED",
+            amount_delta=Decimal("-100.00"),
+            txn_date=date.today(),
+        )
+        balance = PartyOutstandingBalance.objects.get(customer=self.customer)
+
+        resp = self.client.get(
+            f"{OUTSTANDING_URL}{balance.id}/movements/?movement_type=PAYMENT_RECEIVED"
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["count"], 1)
+        self.assertEqual(resp.data["results"][0]["movement_type"], "PAYMENT_RECEIVED")
+
+    def test_movements_endpoint_rejects_invalid_movement_type_enum(self):
+        """Invalid movement_type should return 400 from enum validation."""
+        self._create_balance()
+        balance = PartyOutstandingBalance.objects.get(customer=self.customer)
+
+        resp = self.client.get(
+            f"{OUTSTANDING_URL}{balance.id}/movements/?movement_type=INVALID"
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("movement_type", resp.data)
+
+    def test_movements_endpoint_filters_by_date_range(self):
+        """from/to date filters should constrain movement history."""
+        d1 = date.today() - timedelta(days=3)
+        d2 = date.today() - timedelta(days=2)
+        d3 = date.today() - timedelta(days=1)
+        for txn_date in (d1, d2, d3):
+            post_movement(
+                tenant=self.tenant,
+                customer=self.customer,
+                movement_type="INVOICE_DEBIT",
+                amount_delta=Decimal("200.00"),
+                txn_date=txn_date,
+            )
+        balance = PartyOutstandingBalance.objects.get(customer=self.customer)
+
+        resp = self.client.get(
+            f"{OUTSTANDING_URL}{balance.id}/movements/?from={d2}&to={d3}"
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["count"], 2)
+        txn_dates = [row["txn_date"] for row in resp.data["results"]]
+        self.assertEqual(txn_dates, [str(d3), str(d2)])
+
+    def test_movements_endpoint_rejects_invalid_date_range(self):
+        """from > to should return validation error."""
+        self._create_balance()
+        balance = PartyOutstandingBalance.objects.get(customer=self.customer)
+
+        resp = self.client.get(
+            f"{OUTSTANDING_URL}{balance.id}/movements/?from={date.today()}&to={date.today() - timedelta(days=1)}"
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("date_to", resp.data)
+
+    def test_movements_endpoint_tenant_isolated(self):
+        """A different tenant should not resolve another tenant's balance id."""
+        self._create_balance()
+        balance = PartyOutstandingBalance.objects.get(customer=self.customer)
+
+        tenant_b = _make_tenant("9200003002", "Other Shop C")
+        self.client.force_authenticate(user=tenant_b)
+        resp = self.client.get(f"{OUTSTANDING_URL}{balance.id}/movements/")
+        self.assertEqual(resp.status_code, 404)
+
+    def test_movements_endpoint_forbidden_without_permission(self):
+        """Cashier should be blocked on movement history endpoint."""
+        self._create_balance()
+        balance = PartyOutstandingBalance.objects.get(customer=self.customer)
+        cashier = _make_cashier("9200004003", "Cashier User 3", self.tenant)
+        self.client.force_authenticate(user=cashier)
+
+        resp = self.client.get(f"{OUTSTANDING_URL}{balance.id}/movements/")
+        self.assertEqual(resp.status_code, 403)
+
+    def test_movements_endpoint_requires_authentication(self):
+        """Unauthenticated requests should get 401."""
+        self._create_balance()
+        balance = PartyOutstandingBalance.objects.get(customer=self.customer)
+        self.client.force_authenticate(user=None)
+
+        resp = self.client.get(f"{OUTSTANDING_URL}{balance.id}/movements/")
+        self.assertEqual(resp.status_code, 401)
+
     def test_ageing_report_overdue_flag_in_api(self):
         """Ageing report from API correctly sets overdue_90_plus."""
         # Create balance with old txn date directly

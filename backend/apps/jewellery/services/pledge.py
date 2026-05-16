@@ -137,6 +137,9 @@ def create_loan(tenant, branch_name, customer, scheme, data, pledge_items_data, 
         updated_by=created_by,
     )
 
+    description_default = PledgeItem._meta.get_field("description").get_default()
+    stone_wt_default = PledgeItem._meta.get_field("stone_wt").get_default()
+
     for idx, item_data in enumerate(pledge_items_data, start=1):
         val_amount = (
             Decimal(str(item_data["net_wt"])) * Decimal(str(item_data["valuation_rate"]))
@@ -144,12 +147,12 @@ def create_loan(tenant, branch_name, customer, scheme, data, pledge_items_data, 
         PledgeItem.objects.create(
             loan=loan,
             line_no=idx,
-            description=item_data.get("description", ""),
+            description=item_data.get("description", description_default),
             metal_id=item_data["metal"],
             purity_id=item_data["purity"],
             gross_wt=item_data["gross_wt"],
             net_wt=item_data["net_wt"],
-            stone_wt=item_data.get("stone_wt", 0),
+            stone_wt=item_data.get("stone_wt", stone_wt_default),
             valuation_rate=item_data["valuation_rate"],
             valuation_amount=val_amount,
         )
@@ -174,6 +177,8 @@ def record_repayment(loan, data, created_by):
     total_due = interest_result["total_due"]
     total_paid = Decimal(str(data["principal_paid"])) + Decimal(str(data["interest_paid"]))
     balance_after = (total_due - total_paid).quantize(Decimal("0.01"))
+    reference_default = LoanRepayment._meta.get_field("reference").get_default()
+    items_released_default = LoanRepayment._meta.get_field("items_released").get_default()
 
     repayment = LoanRepayment.objects.create(
         tenant=loan.tenant,
@@ -183,8 +188,8 @@ def record_repayment(loan, data, created_by):
         principal_paid=data["principal_paid"],
         interest_paid=data["interest_paid"],
         mode=data["mode"],
-        reference=data.get("reference", ""),
-        items_released=data.get("items_released", []),
+        reference=data.get("reference", reference_default),
+        items_released=data.get("items_released", items_released_default),
         balance_after=balance_after,
         created_by=created_by,
         updated_by=created_by,

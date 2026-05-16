@@ -1,19 +1,23 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 
 import InvoiceDetailPage from "@/app/jewellery/billing/[id]/page";
 import { useAppSelector } from "@/store/hooks";
 import {
   useCancelInvoiceMutation,
+  useConvertToInvoiceMutation,
   useGenerateEInvoiceMutation,
+  useGetAdminFeatureFlagsQuery,
   useGetInvoiceQuery,
   useIssueInvoiceMutation,
   useLazyGetInvoicePdfQuery,
   useSendInvoiceMutation,
 } from "@/store/jewellery-api";
 
+const pushMock = jest.fn();
+
 jest.mock("next/navigation", () => ({
   useParams: jest.fn(() => ({ id: "inv-101" })),
-  useRouter: jest.fn(() => ({ push: jest.fn() })),
+  useRouter: jest.fn(() => ({ push: pushMock })),
 }));
 
 jest.mock("@/store/hooks", () => ({
@@ -22,8 +26,10 @@ jest.mock("@/store/hooks", () => ({
 
 jest.mock("@/store/jewellery-api", () => ({
   useGetInvoiceQuery: jest.fn(),
+  useGetAdminFeatureFlagsQuery: jest.fn(),
   useIssueInvoiceMutation: jest.fn(),
   useCancelInvoiceMutation: jest.fn(),
+  useConvertToInvoiceMutation: jest.fn(),
   useLazyGetInvoicePdfQuery: jest.fn(),
   useSendInvoiceMutation: jest.fn(),
   useGenerateEInvoiceMutation: jest.fn(),
@@ -31,8 +37,10 @@ jest.mock("@/store/jewellery-api", () => ({
 
 const useAppSelectorMock = useAppSelector as jest.Mock;
 const useGetInvoiceQueryMock = useGetInvoiceQuery as jest.Mock;
+const useGetAdminFeatureFlagsQueryMock = useGetAdminFeatureFlagsQuery as jest.Mock;
 const useIssueInvoiceMutationMock = useIssueInvoiceMutation as jest.Mock;
 const useCancelInvoiceMutationMock = useCancelInvoiceMutation as jest.Mock;
+const useConvertToInvoiceMutationMock = useConvertToInvoiceMutation as jest.Mock;
 const useLazyGetInvoicePdfQueryMock = useLazyGetInvoicePdfQuery as jest.Mock;
 const useSendInvoiceMutationMock = useSendInvoiceMutation as jest.Mock;
 const useGenerateEInvoiceMutationMock = useGenerateEInvoiceMutation as jest.Mock;
@@ -107,13 +115,24 @@ function makeIssuedInvoice() {
   };
 }
 
+function makeEstimateInvoice(overrides?: Partial<ReturnType<typeof makeIssuedInvoice>>) {
+  return {
+    ...makeIssuedInvoice(),
+    invoice_type: "ESTIMATE",
+    status: "DRAFT",
+    ...overrides,
+  };
+}
+
 function setupDefaults() {
   useAppSelectorMock.mockImplementation((selector: (state: unknown) => unknown) =>
     selector({ auth: { currentUser: { role: "collector", module_roles: [] } } }),
   );
   useGetInvoiceQueryMock.mockReturnValue({ data: makeIssuedInvoice(), isLoading: false });
+  useGetAdminFeatureFlagsQueryMock.mockReturnValue({ data: { einvoice_applicable: true } });
   useIssueInvoiceMutationMock.mockReturnValue([jest.fn(), { isLoading: false }]);
   useCancelInvoiceMutationMock.mockReturnValue([jest.fn(), { isLoading: false }]);
+  useConvertToInvoiceMutationMock.mockReturnValue([jest.fn(), { isLoading: false }]);
   useLazyGetInvoicePdfQueryMock.mockReturnValue([jest.fn(), { isFetching: false }]);
   useSendInvoiceMutationMock.mockReturnValue([jest.fn(), { isLoading: false }]);
   useGenerateEInvoiceMutationMock.mockReturnValue([jest.fn(), { isLoading: false }]);
@@ -122,14 +141,17 @@ function setupDefaults() {
 describe("Invoice detail permission and loading behavior", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    pushMock.mockReset();
     setupDefaults();
   });
 
   it("hides cancel action for users without admin/manager jewellery roles", () => {
     render(<InvoiceDetailPage />);
 
-    expect(screen.queryByRole("button", { name: "Cancel invoice" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "More ▾" }));
+
     expect(screen.getByRole("button", { name: "Print" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
   });
 
   it("shows cancel action for jewellery manager role", () => {
@@ -146,7 +168,8 @@ describe("Invoice detail permission and loading behavior", () => {
 
     render(<InvoiceDetailPage />);
 
-    expect(screen.getByRole("button", { name: "Cancel invoice" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "More ▾" }));
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
   });
 
   it("renders loading state while invoice detail is fetching", () => {
@@ -155,5 +178,70 @@ describe("Invoice detail permission and loading behavior", () => {
     render(<InvoiceDetailPage />);
 
     expect(screen.getByText("Loading invoice...")).toBeInTheDocument();
+  });
+
+  it("shows warning feedback for non-draft estimate conversion", () => {
+    useGetInvoiceQueryMock.mockReturnValue({
+      data: makeEstimateInvoice({ status: "ISSUED" }),
+      isLoading: false,
+    });
+
+    render(<InvoiceDetailPage />);
+
+    fireEvent.click(screen.getByTestId("jwl-estimate-convert-button"));
+    expect(screen.getByTestId("jwl-estimate-convert-permission")).toBeInTheDocument();
+    expect(screen.getByTestId("jwl-estimate-convert-feedback")).toHaveTextContent(
+      "Only draft estimates can be converted to invoice.",
+    );
+  });
+
+  it("hides convert action for non-estimate invoice", () => {
+    useGetInvoiceQueryMock.mockReturnValue({
+      data: makeIssuedInvoice({ invoice_type: "TAX_INVOICE", status: "DRAFT" }),
+      isLoading: false,
+    });
+
+    render(<InvoiceDetailPage />);
+
+    expect(screen.queryByTestId("jwl-estimate-convert-button")).not.toBeInTheDocument();
+  });
+
+  it("converts draft estimate and routes to new invoice detail", async () => {
+    useGetInvoiceQueryMock.mockReturnValue({
+      data: makeEstimateInvoice(),
+      isLoading: false,
+    });
+    const convertMutation = jest.fn(() => ({
+      unwrap: () => Promise.resolve({ id: "inv-202" }),
+    }));
+    useConvertToInvoiceMutationMock.mockReturnValue([convertMutation, { isLoading: false }]);
+
+    render(<InvoiceDetailPage />);
+
+    fireEvent.click(screen.getByTestId("jwl-estimate-convert-button"));
+    expect(await screen.findByTestId("jwl-estimate-convert-feedback")).toHaveTextContent(
+      "Converting estimate and opening invoice...",
+    );
+    expect(convertMutation).toHaveBeenCalledWith("inv-101");
+    expect(pushMock).toHaveBeenCalledWith("/jewellery/billing/inv-202");
+  });
+
+  it("shows error feedback when estimate conversion fails", async () => {
+    useGetInvoiceQueryMock.mockReturnValue({
+      data: makeEstimateInvoice(),
+      isLoading: false,
+    });
+    const convertMutation = jest.fn(() => ({
+      unwrap: () => Promise.reject(new Error("bad request")),
+    }));
+    useConvertToInvoiceMutationMock.mockReturnValue([convertMutation, { isLoading: false }]);
+
+    render(<InvoiceDetailPage />);
+
+    fireEvent.click(screen.getByTestId("jwl-estimate-convert-button"));
+    expect(await screen.findByTestId("jwl-estimate-convert-feedback")).toHaveTextContent(
+      "Could not convert estimate. Please try again.",
+    );
+    expect(pushMock).not.toHaveBeenCalled();
   });
 });

@@ -10,6 +10,8 @@ import { Screen } from "@/components/layout/Screen";
 import { Button } from "@/components/ui/Button";
 import { SkeletonList } from "@/components/ui/Skeleton";
 import {
+  type JwlMetal,
+  type JwlPurity,
   useCreateItemMutation,
   useListDesignsQuery,
   useListMetalsQuery,
@@ -69,6 +71,12 @@ export default function NewItemPage() {
     { metal: selectedMetalCode },
     { skip: !selectedMetalCode },
   );
+  const metalsList = Array.isArray(metals)
+    ? metals
+    : ((metals as unknown as { results?: JwlMetal[] } | undefined)?.results ?? []);
+  const puritiesList = Array.isArray(purities)
+    ? purities
+    : ((purities as unknown as { results?: JwlPurity[] } | undefined)?.results ?? []);
   const { data: designsData } = useListDesignsQuery({});
   const [createItem] = useCreateItemMutation();
 
@@ -104,13 +112,13 @@ export default function NewItemPage() {
 
   // When metal changes, reset purity
   useEffect(() => {
-    const selectedMetal = (metals ?? []).find((m) => m.id === formik.values.metal);
+    const selectedMetal = metalsList.find((m) => m.id === formik.values.metal);
     setSelectedMetalCode(selectedMetal?.code ?? "");
     if (formik.values.purity) {
       formik.setFieldValue("purity", "");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formik.values.metal, metals]);
+  }, [formik.values.metal, metalsList]);
 
   function fieldState(name: keyof ItemFormValues) {
     return {
@@ -168,7 +176,7 @@ export default function NewItemPage() {
             error={fieldState("metal").error}
           >
             <option value="">Select metal</option>
-            {(metals ?? []).map((m) => (
+            {metalsList.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name} ({m.code})
               </option>
@@ -189,7 +197,7 @@ export default function NewItemPage() {
             <option value="">
               {!selectedMetalCode ? "Select a metal first" : isFetchingPurities ? "Loading…" : "Select purity"}
             </option>
-            {(purities ?? []).map((p) => (
+            {puritiesList.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.code} ({p.pct}%)
               </option>

@@ -7,6 +7,7 @@ import {
   useGetLiveRatesQuery,
   useIssueInvoiceMutation,
   useLazyScanItemQuery,
+  useListInvoicesQuery,
   useListCustomersQuery,
   useListItemsQuery,
 } from "@/store/jewellery-api";
@@ -21,6 +22,7 @@ jest.mock("@/store/jewellery-api", () => ({
   useCreateInvoiceMutation: jest.fn(),
   useIssueInvoiceMutation: jest.fn(),
   useLazyScanItemQuery: jest.fn(),
+  useListInvoicesQuery: jest.fn(),
   useListCustomersQuery: jest.fn(),
   useListItemsQuery: jest.fn(),
 }));
@@ -30,6 +32,7 @@ const useCalculateInvoiceMutationMock = useCalculateInvoiceMutation as jest.Mock
 const useCreateInvoiceMutationMock = useCreateInvoiceMutation as jest.Mock;
 const useIssueInvoiceMutationMock = useIssueInvoiceMutation as jest.Mock;
 const useLazyScanItemQueryMock = useLazyScanItemQuery as jest.Mock;
+const useListInvoicesQueryMock = useListInvoicesQuery as jest.Mock;
 const useListCustomersQueryMock = useListCustomersQuery as jest.Mock;
 const useListItemsQueryMock = useListItemsQuery as jest.Mock;
 
@@ -44,6 +47,7 @@ function setupHookDefaults() {
   useCreateInvoiceMutationMock.mockReturnValue([createTrigger, { isLoading: false }]);
   useIssueInvoiceMutationMock.mockReturnValue([issueTrigger, { isLoading: false }]);
   useLazyScanItemQueryMock.mockReturnValue([scanTrigger, { isFetching: false }]);
+  useListInvoicesQueryMock.mockReturnValue({ data: { results: [] } });
   useListCustomersQueryMock.mockReturnValue({ data: { results: [] } });
   useListItemsQueryMock.mockReturnValue({ data: { results: [] } });
 
@@ -51,7 +55,7 @@ function setupHookDefaults() {
 }
 
 function addValidLine() {
-  fireEvent.click(screen.getByRole("button", { name: "Add line item" }));
+  fireEvent.click(screen.getByRole("button", { name: "Add line" }));
   fireEvent.change(screen.getByLabelText("Description"), { target: { value: "22K ring" } });
   fireEvent.change(screen.getByLabelText("Net Wt"), { target: { value: "5.2500" } });
 }
@@ -69,7 +73,7 @@ describe("InvoiceFormContent", () => {
 
     render(<InvoiceFormContent />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Add line item" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add line" }));
     act(() => {
       jest.runOnlyPendingTimers();
     });
@@ -97,7 +101,7 @@ describe("InvoiceFormContent", () => {
     addValidLine();
     fireEvent.click(screen.getByRole("button", { name: "Save & issue" }));
 
-    expect(await screen.findByText("Reference invoice ID is required for credit note.")).toBeInTheDocument();
+    expect(await screen.findByText("Reference invoice is required for credit note.")).toBeInTheDocument();
     expect(createTrigger).not.toHaveBeenCalled();
   });
 
@@ -167,7 +171,7 @@ describe("InvoiceFormContent", () => {
   it("supports mobile-safe collapse and expand interaction on line item", () => {
     render(<InvoiceFormContent />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Add line item" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add line" }));
 
     const collapseButton = screen.getByRole("button", { name: "Collapse line 1" });
     fireEvent.click(collapseButton);

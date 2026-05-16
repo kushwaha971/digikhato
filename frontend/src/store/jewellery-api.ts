@@ -166,6 +166,43 @@ export interface JwlTransferCreateParams {
   lines: Array<{ item: string; qty: number; weight?: string }>;
 }
 
+export interface JwlTransferRegisterSummary {
+  count: number;
+  received_count: number;
+  in_transit_count: number;
+  total_weight: string;
+}
+
+export interface JwlTransferRegisterRow {
+  id: string;
+  from_branch: string;
+  to_branch: string;
+  status: JwlTransfer["status"];
+  created_at: string;
+  dispatched_at: string | null;
+  received_at: string | null;
+  line_count: number;
+  total_weight: string;
+  notes: string;
+}
+
+export interface JwlTransferRegisterReport {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  summary: JwlTransferRegisterSummary;
+  results: JwlTransferRegisterRow[];
+}
+
+export interface JwlTransferRegisterReportParams {
+  from_date?: string;
+  to_date?: string;
+  status?: JwlTransfer["status"] | "ALL" | "";
+  from_branch?: string;
+  to_branch?: string;
+  page?: number;
+}
+
 // ─── Billing ──────────────────────────────────────────────────────────────────
 
 export interface JwlCustomer {
@@ -181,6 +218,9 @@ export interface JwlCustomer {
   dob: string | null;
   anniversary: string | null;
   loyalty_points: number;
+  outstanding_amount_balance: string;
+  outstanding_metal_balance_grams: string;
+  outstanding_last_txn_date: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -517,7 +557,14 @@ export interface JwlOutstandingParty {
 export interface JwlOutstandingMovement {
   id: string;
   balance: string;
-  movement_type: string;
+  movement_type:
+    | "INVOICE_DEBIT"
+    | "INVOICE_CREDIT"
+    | "PAYMENT_RECEIVED"
+    | "ADVANCE_GIVEN"
+    | "METAL_ISSUED"
+    | "METAL_RECEIVED"
+    | "MANUAL_ADJUSTMENT";
   amount_delta: string;
   metal_delta_grams: string;
   reference_type: string;
@@ -525,6 +572,15 @@ export interface JwlOutstandingMovement {
   notes: string;
   txn_date: string;
   created_at: string;
+}
+
+export interface JwlOutstandingMovementsParams {
+  id: string;
+  page?: number;
+  page_size?: number;
+  movement_type?: JwlOutstandingMovement["movement_type"];
+  date_from?: string;
+  date_to?: string;
 }
 
 export interface JwlOutstandingDetail {
@@ -667,6 +723,107 @@ export interface JwlInterestPreview {
   months?: number;
 }
 
+// ─── GST Report Types ─────────────────────────────────────────────────────────
+
+export interface JwlGstReportRow {
+  voucher_no: string;
+  voucher_date: string;
+  invoice_type: string;
+  customer_gstin: string;
+  taxable_amount: string;
+  cgst: string;
+  sgst: string;
+  igst: string;
+  total_amount: string;
+}
+
+export interface JwlGstr1Summary {
+  invoice_count: number;
+  b2b_count: number;
+  b2c_count: number;
+  credit_note_count: number;
+  taxable_total: string;
+  cgst_total: string;
+  sgst_total: string;
+  igst_total: string;
+}
+
+export interface JwlGstr1Report {
+  period: string;
+  generated_at: string;
+  summary: JwlGstr1Summary;
+  b2b: JwlGstReportRow[];
+  b2c: JwlGstReportRow[];
+  cdnr: JwlGstReportRow[];
+}
+
+export interface JwlGstr3BReport {
+  period: string;
+  generated_at: string;
+  outward_supplies: {
+    taxable_value: string;
+    igst: string;
+    cgst: string;
+    sgst: string;
+    cess: string;
+  };
+  itc: {
+    eligible_igst: string;
+    eligible_cgst: string;
+    eligible_sgst: string;
+    reversed_igst: string;
+    reversed_cgst: string;
+    reversed_sgst: string;
+  };
+  net_tax_payable: {
+    igst: string;
+    cgst: string;
+    sgst: string;
+    cess: string;
+  };
+}
+
+// ─── Accounts & Ledger (Module 5) ────────────────────────────────────────────
+
+export interface JwlAccount {
+  id: string;
+  code: string;
+  name: string;
+  account_type: "ASSET" | "LIABILITY" | "INCOME" | "EXPENSE" | "EQUITY";
+  parent_id: string | null;
+  is_system: boolean;
+  children?: JwlAccount[];
+}
+
+export interface JwlVoucherEntry {
+  id: string;
+  account_id: string;
+  account_name: string;
+  debit: string;
+  credit: string;
+  narration: string;
+}
+
+export interface JwlVoucher {
+  id: string;
+  voucher_no: string;
+  voucher_date: string;
+  voucher_type: "RECEIPT" | "PAYMENT" | "JOURNAL" | "CONTRA";
+  narration: string;
+  total_amount: string;
+  status: "DRAFT" | "POSTED";
+  entries: JwlVoucherEntry[];
+}
+
+export interface JwlTrialBalanceRow {
+  account_id: string;
+  account_code: string;
+  account_name: string;
+  debit_total: string;
+  credit_total: string;
+  balance: string;
+}
+
 // ─── RTK Slice ────────────────────────────────────────────────────────────────
 
 export const jewelleryApi = api.injectEndpoints({
@@ -727,6 +884,13 @@ export const jewelleryApi = api.injectEndpoints({
       query: (params) => ({ url: "jwl/v1/transfers/", params }),
       providesTags: ["Jewellery"],
     }),
+    getTransferRegisterReport: builder.query<
+      JwlTransferRegisterReport,
+      JwlTransferRegisterReportParams
+    >({
+      query: (params) => ({ url: "jwl/v1/transfers/register-report/", params }),
+      providesTags: ["Jewellery"],
+    }),
     createTransfer: builder.mutation<JwlTransfer, JwlTransferCreateParams>({
       query: (data) => ({ url: "jwl/v1/transfers/", method: "POST", data }),
       invalidatesTags: ["Jewellery"],
@@ -741,6 +905,10 @@ export const jewelleryApi = api.injectEndpoints({
     }),
     receiveTransfer: builder.mutation<JwlTransfer, string>({
       query: (id) => ({ url: `jwl/v1/transfers/${id}/receive/`, method: "POST" }),
+      invalidatesTags: ["Jewellery"],
+    }),
+    rejectTransfer: builder.mutation<JwlTransfer, string>({
+      query: (id) => ({ url: `jwl/v1/transfers/${id}/reject/`, method: "POST" }),
       invalidatesTags: ["Jewellery"],
     }),
 
@@ -811,11 +979,35 @@ export const jewelleryApi = api.injectEndpoints({
       query: () => ({ url: "jwl/v1/metals/" }),
       providesTags: ["Jewellery"],
     }),
+    createMetal: builder.mutation<JwlMetal, Partial<JwlMetal>>({
+      query: (data) => ({ url: "jwl/v1/metals/", method: "POST", data }),
+      invalidatesTags: ["Jewellery"],
+    }),
+    updateMetal: builder.mutation<JwlMetal, { id: string } & Partial<JwlMetal>>({
+      query: ({ id, ...data }) => ({ url: `jwl/v1/metals/${id}/`, method: "PATCH", data }),
+      invalidatesTags: ["Jewellery"],
+    }),
+    deleteMetal: builder.mutation<void, string>({
+      query: (id) => ({ url: `jwl/v1/metals/${id}/`, method: "DELETE" }),
+      invalidatesTags: ["Jewellery"],
+    }),
 
     // Master — Purities
     listPurities: builder.query<JwlPurity[], { metal?: string }>({
       query: (params) => ({ url: "jwl/v1/purities/", params }),
       providesTags: ["Jewellery"],
+    }),
+    createPurity: builder.mutation<JwlPurity, Partial<JwlPurity>>({
+      query: (data) => ({ url: "jwl/v1/purities/", method: "POST", data }),
+      invalidatesTags: ["Jewellery"],
+    }),
+    updatePurity: builder.mutation<JwlPurity, { id: string } & Partial<JwlPurity>>({
+      query: ({ id, ...data }) => ({ url: `jwl/v1/purities/${id}/`, method: "PATCH", data }),
+      invalidatesTags: ["Jewellery"],
+    }),
+    deletePurity: builder.mutation<void, string>({
+      query: (id) => ({ url: `jwl/v1/purities/${id}/`, method: "DELETE" }),
+      invalidatesTags: ["Jewellery"],
     }),
 
     // Master — Categories (tree)
@@ -1008,10 +1200,14 @@ export const jewelleryApi = api.injectEndpoints({
       query: (id) => ({ url: `jwl/v1/outstanding/${id}/` }),
       providesTags: ["Jewellery"],
     }),
+    getOutstandingMovements: builder.query<PaginatedResponse<JwlOutstandingMovement>, JwlOutstandingMovementsParams>({
+      query: ({ id, ...params }) => ({ url: `jwl/v1/outstanding/${id}/movements/`, params }),
+      providesTags: ["Jewellery"],
+    }),
     postOutstandingAdjustment: builder.mutation<
       {
         movement_id: string;
-        movement_type: string;
+        movement_type: "MANUAL_ADJUSTMENT";
         amount_delta: string;
         metal_delta_grams: string;
         amount_balance: string;
@@ -1067,6 +1263,41 @@ export const jewelleryApi = api.injectEndpoints({
       query: ({ id, ...data }) => ({ url: `jwl/v1/pledge-loans/${id}/repay/`, method: "POST", data }),
       invalidatesTags: ["Jewellery"],
     }),
+
+    // GST Reports (B-2.3)
+    getGstr1Report: builder.query<JwlGstr1Report, { period: string }>({
+      query: (params) => ({ url: "jwl/v1/reports/gstr-1/", params }),
+      providesTags: ["Jewellery"],
+    }),
+    getGstr3bReport: builder.query<JwlGstr3BReport, { period: string }>({
+      query: (params) => ({ url: "jwl/v1/reports/gstr-3b/", params }),
+      providesTags: ["Jewellery"],
+    }),
+
+    // Accounts & Ledger (Module 5)
+    getCoaTree: builder.query<JwlAccount[], void>({
+      query: () => ({ url: "jwl/v1/accounts/coa/" }),
+      providesTags: ["Jewellery"],
+    }),
+    listVouchers: builder.query<
+      PaginatedResponse<JwlVoucher>,
+      { voucher_type?: string; date_from?: string; date_to?: string }
+    >({
+      query: (params) => ({ url: "jwl/v1/accounts/vouchers/", params }),
+      providesTags: ["Jewellery"],
+    }),
+    createVoucher: builder.mutation<JwlVoucher, Record<string, unknown>>({
+      query: (data) => ({ url: "jwl/v1/accounts/vouchers/", method: "POST", data }),
+      invalidatesTags: ["Jewellery"],
+    }),
+    postVoucher: builder.mutation<JwlVoucher, string>({
+      query: (id) => ({ url: `jwl/v1/accounts/vouchers/${id}/post/`, method: "POST" }),
+      invalidatesTags: ["Jewellery"],
+    }),
+    getTrialBalance: builder.query<JwlTrialBalanceRow[], { date_from: string; date_to: string }>({
+      query: (params) => ({ url: "jwl/v1/accounts/trial-balance/", params }),
+      providesTags: ["Jewellery"],
+    }),
   }),
 });
 
@@ -1084,10 +1315,12 @@ export const {
   useCreateStockTakeMutation,
   useCompleteStockTakeMutation,
   useListTransfersQuery,
+  useGetTransferRegisterReportQuery,
   useCreateTransferMutation,
   useApproveTransferMutation,
   useDispatchTransferMutation,
   useReceiveTransferMutation,
+  useRejectTransferMutation,
   useGetLiveRatesQuery,
   useGetRateHistoryQuery,
   useOverrideRateMutation,
@@ -1107,7 +1340,13 @@ export const {
   useGenerateEInvoiceMutation,
   useConvertToInvoiceMutation,
   useListMetalsQuery,
+  useCreateMetalMutation,
+  useUpdateMetalMutation,
+  useDeleteMetalMutation,
   useListPuritiesQuery,
+  useCreatePurityMutation,
+  useUpdatePurityMutation,
+  useDeletePurityMutation,
   useListCategoriesQuery,
   useCreateCategoryMutation,
   useUpdateCategoryMutation,
@@ -1141,6 +1380,7 @@ export const {
   useListOutstandingQuery,
   useLazyExportOutstandingCsvQuery,
   useGetOutstandingPartyQuery,
+  useGetOutstandingMovementsQuery,
   usePostOutstandingAdjustmentMutation,
   useListItemPuritySummaryQuery,
   useListLoanSchemesQuery,
@@ -1150,4 +1390,11 @@ export const {
   useCreatePledgeLoanMutation,
   useGetPledgeLoanInterestQuery,
   useRepayPledgeLoanMutation,
+  useGetGstr1ReportQuery,
+  useGetGstr3bReportQuery,
+  useGetCoaTreeQuery,
+  useListVouchersQuery,
+  useCreateVoucherMutation,
+  usePostVoucherMutation,
+  useGetTrialBalanceQuery,
 } = jewelleryApi;

@@ -81,6 +81,7 @@ export const MODULE_META: Record<
       { href: ROUTES.app.jewellery.usersRoles, label: "Users & Roles" },
       { href: ROUTES.app.jewellery.multiBranch, label: "Multi-Branch" },
       { href: ROUTES.app.jewellery.barcodeRfid, label: "Barcode / RFID" },
+      { href: ROUTES.app.jewellery.settings, label: "Settings" },
       { href: ROUTES.app.jewellery.rates, label: "MCX Live Rate" },
       { href: ROUTES.app.jewellery.notifications, label: "Notifications" },
       { href: ROUTES.app.jewellery.mobile, label: "Mobile App" },

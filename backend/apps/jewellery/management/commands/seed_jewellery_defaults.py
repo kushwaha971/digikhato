@@ -4,9 +4,19 @@ from decimal import Decimal
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
+from apps.jewellery.models.accounts import Account
 from apps.jewellery.models.master import Category, Metal, NumberSeries, Purity, TaxSlab
 from apps.users.models import User
 
+
+DEFAULT_COA_ACCOUNTS = [
+    {"code": "1000", "name": "Cash", "account_type": "ASSET"},
+    {"code": "1100", "name": "Bank", "account_type": "ASSET"},
+    {"code": "2000", "name": "Accounts Payable", "account_type": "LIABILITY"},
+    {"code": "3000", "name": "Sales", "account_type": "INCOME"},
+    {"code": "3100", "name": "GST Payable", "account_type": "LIABILITY"},
+    {"code": "5000", "name": "Stock", "account_type": "ASSET"},
+]
 
 DEFAULT_METALS = [
     {"code": "GOLD", "name": "Gold", "default_unit": "gram"},
@@ -119,6 +129,21 @@ class Command(BaseCommand):
                     "prefix": series["prefix"],
                     "next_number": series["next_number"],
                     "padding": series["padding"],
+                    "branch_name": "",
+                    "created_by": created_by,
+                    "updated_by": created_by,
+                },
+            )
+
+        for acct in DEFAULT_COA_ACCOUNTS:
+            Account.objects.update_or_create(
+                tenant=tenant,
+                code=acct["code"],
+                deleted_at__isnull=True,
+                defaults={
+                    "name": acct["name"],
+                    "account_type": acct["account_type"],
+                    "is_system": True,
                     "branch_name": "",
                     "created_by": created_by,
                     "updated_by": created_by,

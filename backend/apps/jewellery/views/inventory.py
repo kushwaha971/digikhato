@@ -1,14 +1,20 @@
 """Jewellery inventory viewsets (Phase B-1.3)."""
 
+from datetime import timedelta
+from decimal import Decimal
+from typing import Optional
+
 from django.db import transaction
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, DecimalField, Q, Sum, Value
+from django.db.models.functions import Coalesce
+from django.utils.dateparse import parse_date
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from apps.common.constants import P_INVENTORY_WRITEOFF
-from apps.jewellery.models.inventory import Item, StockMovement, StockTake, StockTakeLine, Transfer
+from apps.common.constants import P_INVENTORY_WRITEOFF, P_REPORTS_EXPORT
+from apps.jewellery.models.inventory import Item, StockMovement, StockTake, StockTakeLine, Transfer, TransferLine
 from apps.jewellery.permissions import HasJewelleryPermission
 from apps.jewellery.serializers.inventory import (
     ItemDetailSerializer,
@@ -17,10 +23,19 @@ from apps.jewellery.serializers.inventory import (
     StockMovementSerializer,
     StockTakeLineSerializer,
     StockTakeSerializer,
+    TransferRegisterRowSerializer,
     TransferSerializer,
     TransferWriteSerializer,
 )
 from apps.jewellery.services.inventory import (
+    ITEM_STATUS_IN_STOCK,
+    STOCK_TAKE_STATUS_IN_PROGRESS,
+    TRANSFER_REJECTABLE_STATUSES,
+    TRANSFER_STATUS_APPROVED,
+    TRANSFER_STATUS_IN_TRANSIT,
+    TRANSFER_STATUS_RECEIVED,
+    TRANSFER_STATUS_REQUESTED,
+    TRANSFER_STATUS_REJECTED,
     complete_stock_take,
     dispatch_transfer,
     receive_transfer,
@@ -106,7 +121,7 @@ class ItemViewSet(JewelleryTenantScopedViewSet):
     @action(detail=False, methods=["get"], url_path="purity-summary")
     def purity_summary(self, request):
         params = request.query_params
-        qs = self.get_queryset().filter(status="IN_STOCK")
+        qs = self.get_queryset().filter(status=ITEM_STATUS_IN_STOCK)
         if metal_code := params.get("metal_code"):
             qs = qs.filter(metal__code__iexact=metal_code)
 
@@ -173,7 +188,7 @@ class StockTakeViewSet(JewelleryTenantScopedViewSet):
         in_stock_items = Item.objects.filter(
             tenant=tenant,
             branch_name=branch,
-            status="IN_STOCK",
+            status=ITEM_STATUS_IN_STOCK,
             deleted_at__isnull=True,
         )
         lines = [
@@ -191,7 +206,7 @@ class StockTakeViewSet(JewelleryTenantScopedViewSet):
     @transaction.atomic
     def update_line(self, request, pk=None, line_id=None):
         stock_take = self.get_object()
-        if stock_take.status != "IN_PROGRESS":
+        if stock_take.status != STOCK_TAKE_STATUS_IN_PROGRESS:
             return Response(
                 {"detail": "Stock take is not in progress."}, status=status.HTTP_400_BAD_REQUEST
             )
@@ -208,7 +223,7 @@ class StockTakeViewSet(JewelleryTenantScopedViewSet):
     @action(detail=True, methods=["post"], url_path="complete")
     def complete(self, request, pk=None):
         stock_take = self.get_object()
-        if stock_take.status != "IN_PROGRESS":
+        if stock_take.status != STOCK_TAKE_STATUS_IN_PROGRESS:
             return Response(
                 {"detail": "Only IN_PROGRESS stock takes can be completed."},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -220,6 +235,7 @@ class StockTakeViewSet(JewelleryTenantScopedViewSet):
 
 class TransferViewSet(JewelleryTenantScopedViewSet):
     queryset = Transfer.objects.prefetch_related("lines__item").select_related("tenant")
+    report_export_permission = HasJewelleryPermission(P_REPORTS_EXPORT)
 
     def get_serializer_class(self):
         if self.action in ("create",):
@@ -232,7 +248,134 @@ class TransferViewSet(JewelleryTenantScopedViewSet):
             qs = qs.filter(status=transfer_status)
         if from_branch := self.request.query_params.get("from_branch"):
             qs = qs.filter(from_branch=from_branch)
+        if to_branch := self.request.query_params.get("to_branch"):
+            qs = qs.filter(to_branch=to_branch)
         return qs
+
+    @action(detail=False, methods=["get"], url_path="register-report")
+    def register_report(self, request):
+        export_requested = (request.query_params.get("export") or "").strip().lower() in {"1", "true", "yes"}
+        if export_requested and not self.report_export_permission.has_permission(request, self):
+            return Response(
+                {"detail": "You do not have report export permission."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        filtered_qs = super().get_queryset()
+
+        from_branch = (request.query_params.get("from_branch") or "").strip()
+        to_branch = (request.query_params.get("to_branch") or "").strip()
+        if from_branch and to_branch and from_branch == to_branch:
+            return Response(
+                {
+                    "count": 0,
+                    "next": None,
+                    "previous": None,
+                    "summary": {
+                        "count": 0,
+                        "received_count": 0,
+                        "in_transit_count": 0,
+                        "total_weight": Decimal("0.0000"),
+                    },
+                    "results": [],
+                }
+            )
+        if from_branch:
+            filtered_qs = filtered_qs.filter(from_branch=from_branch)
+        if to_branch:
+            filtered_qs = filtered_qs.filter(to_branch=to_branch)
+
+        def _safe_parse_date(value: Optional[str]):
+            if not value:
+                return None
+            try:
+                return parse_date(value)
+            except ValueError:
+                return None
+
+        from_date_raw = request.query_params.get("from_date")
+        to_date_raw = request.query_params.get("to_date")
+        parsed_from = _safe_parse_date(from_date_raw)
+        if from_date_raw and parsed_from is None:
+            return Response({"detail": "Invalid from_date. Use YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
+        parsed_to = _safe_parse_date(to_date_raw)
+        if to_date_raw and parsed_to is None:
+            return Response({"detail": "Invalid to_date. Use YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
+        if parsed_from and parsed_to and parsed_from > parsed_to:
+            return Response(
+                {"detail": "Invalid date range. from_date cannot be greater than to_date."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if parsed_from and parsed_to and (parsed_to - parsed_from) > timedelta(days=92):
+            return Response(
+                {"detail": "Date range cannot exceed 92 days."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if parsed_from:
+            filtered_qs = filtered_qs.filter(created_at__date__gte=parsed_from)
+        if parsed_to:
+            filtered_qs = filtered_qs.filter(created_at__date__lte=parsed_to)
+
+        valid_statuses = {choice[0] for choice in Transfer.STATUS}
+        status_filter = (request.query_params.get("status") or "").strip()
+        if status_filter and status_filter != "ALL" and status_filter not in valid_statuses:
+            return Response(
+                {"detail": "Invalid status. Allowed: ALL or valid transfer status values."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if status_filter and status_filter != "ALL":
+            filtered_qs = filtered_qs.filter(status=status_filter)
+
+        summary_counts = filtered_qs.aggregate(
+            count=Count("id"),
+            received_count=Count("id", filter=Q(status=TRANSFER_STATUS_RECEIVED)),
+            in_transit_count=Count("id", filter=Q(status=TRANSFER_STATUS_IN_TRANSIT)),
+        )
+        summary_weight = (
+            TransferLine.objects.filter(transfer__in=filtered_qs)
+            .aggregate(
+                total_weight=Coalesce(
+                    Sum("weight"),
+                    Value(Decimal("0.0000")),
+                    output_field=DecimalField(max_digits=12, decimal_places=4),
+                )
+            )
+            .get("total_weight")
+        )
+
+        report_qs = filtered_qs.annotate(
+            line_count=Count("lines", distinct=True),
+            total_weight=Coalesce(
+                Sum("lines__weight"),
+                Value(Decimal("0.0000")),
+                output_field=DecimalField(max_digits=12, decimal_places=4),
+            ),
+        ).order_by("-created_at", "-id")
+
+        page = self.paginate_queryset(report_qs)
+        rows = page if page is not None else report_qs
+        serializer = TransferRegisterRowSerializer(rows, many=True)
+
+        summary = {
+            "count": summary_counts.get("count", 0) or 0,
+            "received_count": summary_counts.get("received_count", 0) or 0,
+            "in_transit_count": summary_counts.get("in_transit_count", 0) or 0,
+            "total_weight": summary_weight or Decimal("0.0000"),
+        }
+
+        if page is None:
+            return Response({"summary": summary, "results": serializer.data})
+
+        paginator = self.paginator
+        return Response(
+            {
+                "count": paginator.page.paginator.count,
+                "next": paginator.get_next_link(),
+                "previous": paginator.get_previous_link(),
+                "summary": summary,
+                "results": serializer.data,
+            }
+        )
 
     @transaction.atomic
     def perform_create(self, serializer):
@@ -248,19 +391,19 @@ class TransferViewSet(JewelleryTenantScopedViewSet):
     @transaction.atomic
     def approve(self, request, pk=None):
         transfer = self.get_object()
-        if transfer.status != "REQUESTED":
+        if transfer.status != TRANSFER_STATUS_REQUESTED:
             return Response(
                 {"detail": "Only REQUESTED transfers can be approved."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        transfer.status = "APPROVED"
+        transfer.status = TRANSFER_STATUS_APPROVED
         transfer.approved_by = request.user
         transfer.updated_by = request.user
         transfer.save(update_fields=["status", "approved_by", "updated_by", "updated_at"])
         return Response(TransferSerializer(transfer).data)
 
-    @action(detail=True, methods=["post"], url_path="dispatch")
-    def dispatch(self, request, pk=None):
+    @action(detail=True, methods=["post"], url_path="dispatch", url_name="dispatch")
+    def dispatch_transfer_action(self, request, pk=None):
         transfer = self.get_object()
         try:
             dispatch_transfer(transfer, dispatched_by=request.user)
@@ -281,12 +424,12 @@ class TransferViewSet(JewelleryTenantScopedViewSet):
     @transaction.atomic
     def reject(self, request, pk=None):
         transfer = self.get_object()
-        if transfer.status not in ("REQUESTED", "APPROVED"):
+        if transfer.status not in TRANSFER_REJECTABLE_STATUSES:
             return Response(
                 {"detail": "Transfer cannot be rejected in its current state."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        transfer.status = "REJECTED"
+        transfer.status = TRANSFER_STATUS_REJECTED
         transfer.updated_by = request.user
         transfer.save(update_fields=["status", "updated_by", "updated_at"])
         return Response(TransferSerializer(transfer).data)

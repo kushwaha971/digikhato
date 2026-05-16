@@ -13,7 +13,20 @@
     "test:e2e:headed": "playwright test --headed --workers=1",
     "test:e2e:docker": "playwright test -c playwright.docker.config.ts",
     "test:e2e:docker:headed": "playwright test -c playwright.docker.config.ts --headed --workers=1",
-    "test:e2e:report": "playwright show-report playwright-report"
+    "test:e2e:report": "playwright show-report playwright-report",
+    "dev:e2e": "next dev -p 3050",
+    "test:jwl": "E2E_BASE_URL=http://localhost:3050 playwright test -c playwright.jwl.config.ts",
+    "test:jwl:headed": "HEADED=true E2E_BASE_URL=http://localhost:3050 playwright test -c playwright.jwl.config.ts --headed",
+    "test:jwl:ui": "E2E_BASE_URL=http://localhost:3050 playwright test -c playwright.jwl.config.ts --ui",
+    "test:jwl:debug": "E2E_BASE_URL=http://localhost:3050 playwright test -c playwright.jwl.config.ts --debug",
+    "test:jwl:slow": "HEADED=true SLOWMO=600 E2E_BASE_URL=http://localhost:3050 playwright test -c playwright.jwl.config.ts --headed",
+    "test:jwl:smoke": "E2E_BASE_URL=http://localhost:3050 playwright test -c playwright.jwl.config.ts --grep @smoke",
+    "test:jwl:smoke:headed": "HEADED=true E2E_BASE_URL=http://localhost:3050 playwright test -c playwright.jwl.config.ts --headed --grep @smoke",
+    "test:jwl:api": "E2E_BASE_URL=http://localhost:3050 playwright test -c playwright.jwl.config.ts --grep @api",
+    "test:jwl:billing": "E2E_BASE_URL=http://localhost:3050 playwright test -c playwright.jwl.config.ts --grep @billing",
+    "test:jwl:report": "playwright show-report playwright-report/jwl",
+    "test:jwl:tablet": "E2E_BASE_URL=http://localhost:3050 playwright test -c playwright.jwl.config.ts --project=tablet-jwl",
+    "test:jwl:tablet:headed": "HEADED=true E2E_BASE_URL=http://localhost:3050 playwright test -c playwright.jwl.config.ts --headed --project=tablet-jwl"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.2.7",

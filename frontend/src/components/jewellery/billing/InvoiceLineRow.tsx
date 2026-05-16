@@ -8,7 +8,13 @@ import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import { WeightInput } from "@/components/jewellery/shared/WeightInput";
 import { ItemSearchSelect } from "@/components/jewellery/billing/ItemSearchSelect";
-import { MAKING_MODE_OPTIONS } from "@/constants/jewellery";
+import {
+  BILLING_DEFAULT_HSN_CODE,
+  BILLING_DEFAULT_LINE_METAL_CODE,
+  BILLING_DEFAULT_LINE_PURITY_CODE,
+  BILLING_DEFAULT_NUMERIC_VALUE,
+  MAKING_MODE_OPTIONS,
+} from "@/constants/jewellery";
 import { formatINRCurrency } from "@/utils/jewellery/formulas";
 import type { JwlItem, JwlInvoiceLine, MakingMode, InvoiceType } from "@/store/jewellery-api";
 
@@ -93,7 +99,7 @@ function InvoiceLineRowBase({
           <p className="text-xs text-muted truncate mt-0.5">
             {lineTitle}
             <span className="mx-1">·</span>
-            {line.net_wt || "0"} g
+            {line.net_wt || BILLING_DEFAULT_NUMERIC_VALUE} g
             <span className="mx-1">·</span>
             {formatINRCurrency(computedLine?.line_total)}
           </p>
@@ -131,7 +137,7 @@ function InvoiceLineRowBase({
             label="HSN Code"
             value={line.hsn_code}
             onChange={(event) => onChange(index, { hsn_code: event.target.value })}
-            placeholder="7113"
+            placeholder={BILLING_DEFAULT_HSN_CODE}
           />
           {line.huid ? (
             <div className="flex items-center gap-1.5">
@@ -149,13 +155,13 @@ function InvoiceLineRowBase({
           label="Metal"
           value={line.metal_code}
           onChange={(event) => onChange(index, { metal_code: event.target.value.toUpperCase() })}
-          placeholder="GOLD"
+          placeholder={BILLING_DEFAULT_LINE_METAL_CODE}
         />
         <Input
           label="Purity"
           value={line.purity_code}
           onChange={(event) => onChange(index, { purity_code: event.target.value.toUpperCase() })}
-          placeholder="22K"
+          placeholder={BILLING_DEFAULT_LINE_PURITY_CODE}
         />
         <WeightInput
           label="Gross Wt"

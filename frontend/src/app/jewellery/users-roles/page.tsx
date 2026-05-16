@@ -2,10 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { Screen } from "@/components/layout/Screen";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Modal } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
+import { SkeletonList } from "@/components/ui/Skeleton";
+import { Modal } from "@/components/ui/Modal";
 import {
   useAssignModuleTeamRoleMutation,
   useGetModuleTeamRolesQuery,
@@ -25,14 +28,30 @@ const JWL_ROLE_OPTIONS = [
   { value: "jwl_auditor", label: "Auditor" },
 ];
 
+type BadgeVariant = "danger" | "warning" | "neutral";
+
+function roleBadgeVariant(roleCode: string): BadgeVariant {
+  if (roleCode === "jwl_admin") return "danger";
+  if (roleCode === "jwl_manager") return "warning";
+  return "neutral";
+}
+
+function roleBadgeLabel(roleCode: string): string {
+  const option = JWL_ROLE_OPTIONS.find((o) => o.value === roleCode);
+  return option ? option.label : roleCode;
+}
+
 export default function JewelleryUsersRolesPage() {
   const { data: teamMembers = [] } = useGetTeamMembersQuery();
   const { data: roles = [], isLoading } = useGetModuleTeamRolesQuery(MODULE);
   const [assignRole, { isLoading: isAssigning }] = useAssignModuleTeamRoleMutation();
   const [revokeRole, { isLoading: isRevoking }] = useRevokeModuleTeamRoleMutation();
+
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [selectedRoleCode, setSelectedRoleCode] = useState(JWL_ROLE_OPTIONS[0].value);
+
+  const [revokeConfirmId, setRevokeConfirmId] = useState<number | null>(null);
 
   const roleRows = useMemo(() => {
     return roles.map((role) => {
@@ -58,8 +77,10 @@ export default function JewelleryUsersRolesPage() {
     setSelectedRoleCode(JWL_ROLE_OPTIONS[0].value);
   };
 
-  const handleRevoke = async (roleId: number) => {
-    await revokeRole({ module: MODULE, roleId }).unwrap();
+  const handleRevokeConfirmed = async () => {
+    if (revokeConfirmId === null) return;
+    await revokeRole({ module: MODULE, roleId: revokeConfirmId }).unwrap();
+    setRevokeConfirmId(null);
   };
 
   return (
@@ -72,7 +93,7 @@ export default function JewelleryUsersRolesPage() {
         </Button>
       )}
     >
-      {isLoading ? <div className="app-panel p-4 text-sm text-muted">Loading module roles…</div> : null}
+      {isLoading ? <SkeletonList count={3} /> : null}
 
       {!isLoading && roleRows.length === 0 ? (
         <EmptyState
@@ -90,14 +111,17 @@ export default function JewelleryUsersRolesPage() {
                 <div>
                   <p className="text-sm font-semibold text-text">{role.userName}</p>
                   <p className="text-xs text-muted">{role.userMobile}</p>
-                  <p className="text-xs text-muted mt-1">Role: {role.role_code}</p>
+                  <div className="mt-1.5">
+                    <Badge variant={roleBadgeVariant(role.role_code)}>
+                      {roleBadgeLabel(role.role_code)}
+                    </Badge>
+                  </div>
                 </div>
                 <Button
                   size="xs"
                   variant="danger"
                   fullWidth={false}
-                  onClick={() => handleRevoke(role.id)}
-                  loading={isRevoking}
+                  onClick={() => setRevokeConfirmId(role.id)}
                 >
                   Revoke
                 </Button>
@@ -157,6 +181,17 @@ export default function JewelleryUsersRolesPage() {
           </Select>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={revokeConfirmId !== null}
+        onClose={() => setRevokeConfirmId(null)}
+        onConfirm={handleRevokeConfirmed}
+        title="Revoke Role"
+        description="Are you sure you want to revoke this user's JWL module role? They will lose access immediately."
+        confirmLabel="Revoke"
+        confirmVariant="danger"
+        isLoading={isRevoking}
+      />
     </Screen>
   );
 }
